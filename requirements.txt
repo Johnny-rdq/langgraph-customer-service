@@ -1,0 +1,29 @@
+# ================================================
+# LangGraph 智能客服系统 — 项目依赖
+# ================================================
+# 安装方式: pip install -r requirements.txt
+
+# ── Web 框架 ──
+fastapi>=0.110.0          # FastAPI Web 框架
+uvicorn[standard]>=0.27.0 # ASGI 服务器 (Uvicorn)
+
+# ── LangGraph & LangChain ──
+langgraph>=0.2.0           # LangGraph 状态图编排框架
+langchain>=0.3.0           # LangChain 基础框架
+langchain-openai>=0.2.0    # LangChain OpenAI 兼容接口（用于对接百炼）
+langchain-core>=0.3.0      # LangChain 核心消息类型
+
+# ── 配置管理 ──
+pydantic>=2.0.0            # Pydantic 数据校验
+pydantic-settings>=2.0.0   # Pydantic 环境变量加载
+
+# ── 知识库检索 ──
+scikit-learn>=1.3.0        # TF-IDF 向量化和相似度计算
+jieba>=0.42.1              # 中文分词库
+# 如需升级为向量检索，可添加:
+# chromadb>=0.4.0          # 轻量级向量数据库
+# faiss-cpu>=1.7.0         # Facebook 向量检索库
+
+# ── 可选依赖 ──
+# 若要直接使用 DashScope 原生 SDK (不通过 OpenAI 兼容模式)：
+# dashscope>=1.20.0
