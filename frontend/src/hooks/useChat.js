@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'  // React Hooks
+import { useState, useCallback, useRef, useEffect } from 'react'  // React Hooks
 
 // ── 后端 API 地址 ──
 const API_BASE = '/api/v1'
@@ -9,15 +9,24 @@ const generateMsgId = () => crypto.randomUUID?.() || Math.random().toString(36).
 /**
  * 聊天逻辑 Hook —— 支持流式输出（逐字显示）
  */
-export default function useChat(initialMessages = [], onMessagesChange) {
+export default function useChat(sessionId, initialMessages = [], onMessagesChange) {
   // ── 状态 ──
   const [messages, setMessages] = useState(initialMessages)       // 消息列表
   const [isLoading, setIsLoading] = useState(false)                // 是否正在等待回复
   const [streamingContent, setStreamingContent] = useState('')     // 正在流式输出的文字
   const [error, setError] = useState(null)                         // 错误信息
-  const sessionIdRef = useRef(null)                                // 后端会话 ID
+  const sessionIdRef = useRef(sessionId)                               // 后端会话 ID
   const userIdRef = useRef('user_' + generateMsgId())              // 用户唯一标识
-  const abortRef = useRef(null)                                    // AbortController，用于取消请求
+  const abortRef = useRef(null)
+  // AbortController，用于取消请求
+
+  // ── 监听会话切换，同步更新 UI 和 Backend ID ──
+  useEffect(() => {
+    setMessages(initialMessages)
+    sessionIdRef.current = sessionId
+    setStreamingContent('')
+    setError(null)
+  }, [sessionId]) // 当 sessionId 变化时触发
 
   // ── 更新消息（同时通知父组件）──
   const updateMessages = useCallback(

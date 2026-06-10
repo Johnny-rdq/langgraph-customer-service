@@ -17,7 +17,9 @@ from app.agent.nodes import (                  # 导入 prompt 模板和工具
 )
 from app.core.llm import get_llm               # LLM 实例
 from app.tools.retriever import retrieve_knowledge  # 知识库检索
-from langchain_core.messages import HumanMessage    # LangChain 消息类型
+from langchain_core.messages import HumanMessage, AIMessage  # LangChain 消息类型
+from app.tools.logistics import handle_logistics_intent
+
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
     )
 
     try:
-        result = await _graph.ainvoke(initial_state)
+        config = {"configurable": {"thread_id": session_id}}
+        result = await _graph.ainvoke(initial_state, config=config)
 
         messages = result.get("messages", [])
         reply = ""
@@ -97,23 +100,45 @@ async def chat_stream(request: ChatRequest):
             # 发送意图事件
             yield f"data: {json.dumps({'type': 'intent', 'content': intent}, ensure_ascii=False)}\n\n"
 
-            # ── 第 2 步：知识库检索（需要查的时候才查）──
-            context = "暂无相关知识库内容。"
-            if intent in ("complaint", "inquiry"):
+            # ── 第 2 步：背景信息获取（智能路由）──
+            context = "暂无相关背景信息。"
+
+            if "logistics" in intent:
+                print("🔀 [DEBUG-ROUTE] 路由命中：物流意图，准备调用工具...")
+                context = await handle_logistics_intent(request.message, llm)
+                print("📊 [DEBUG-ROUTE] 工具执行完毕，成功拿到 context 背景资料！")
+
+            elif "complaint" in intent or "inquiry" in intent:
                 retrieved = retrieve_knowledge(query=request.message, top_k=3)
-                if retrieved:
-                    context = "\n\n---\n\n".join(retrieved)
+                context = "\n".join(retrieved) if retrieved else "暂无相关知识库内容。"
 
             # 发送检索事件
             has_knowledge = context != "暂无相关知识库内容。"
             yield f"data: {json.dumps({'type': 'retrieval', 'has_knowledge': has_knowledge}, ensure_ascii=False)}\n\n"
 
             # ── 第 3 步：流式生成回复 ──
+
+            # [新增] 1. 配置当前会话 ID
+            config = {"configurable": {"thread_id": session_id}}
+
+            # [新增] 2. 从 LangGraph 获取历史记忆
+            state_snapshot = _graph.get_state(config)
+            existing_messages = state_snapshot.values.get("messages", []) if state_snapshot.values else []
+
+            # [新增] 3. 拼装成历史文本（只取最近 10 条防超长）
+            chat_history = "\n".join(
+                f"{'用户' if isinstance(m, HumanMessage) else '客服'}: {m.content}"
+                for m in existing_messages[-10:]
+            )
+
+            # 修改 Prompt，把空字符串换成真实的 chat_history
             prompt = RESPONSE_GENERATION_PROMPT.format(
                 retrieved_context=context,
-                chat_history="",   # 流式端点目前不带历史（可后续扩展）
+                chat_history=chat_history,  # <--- 修改这里
                 user_message=request.message,
             )
+
+            # ... 这里的 async for chunk in llm.astream(prompt): 保持不变 ...
 
             # 流式调用 LLM，逐 token yield
             full_reply = ""
@@ -123,8 +148,19 @@ async def chat_stream(request: ChatRequest):
                     full_reply += token
                     yield f"data: {json.dumps({'type': 'token', 'content': token}, ensure_ascii=False)}\n\n"
 
+
+            # [新增] 4. 将本轮问答存入 LangGraph 记忆库
+            _graph.update_state(
+                config,
+                {"messages": [
+                    HumanMessage(content=request.message),
+                    AIMessage(content=full_reply)
+                ]}
+            )
+
             # ── 发送完成事件 ──
             elapsed = time.time() - start_time
+
             logger.info(f"✅ [流式] 完成: elapsed={elapsed:.2f}s, len={len(full_reply)}")
 
             yield f"data: {json.dumps({'type': 'done', 'session_id': session_id, 'intent': intent, 'requires_human': intent == 'human'}, ensure_ascii=False)}\n\n"

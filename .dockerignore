@@ -1,0 +1,41 @@
+# ================================================
+# Docker 构建忽略文件
+# 避免将无关文件复制到镜像中，减小体积并防止泄露
+# ================================================
+
+# ── 环境变量（含 API Key，绝不能打入镜像）──
+.env
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ── 前端（前端由独立容器构建）──
+frontend/
+
+# ── IDE ──
+.idea/
+.vscode/
+
+# ── Git ──
+.git/
+.gitignore
+
+# ── 数据库（运行时挂载，不打包进镜像）──
+storage/
+
+# ── Docker 自身 ──
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# ── 文档 ──
+README.md
+
+# ── 系统文件 ──
+.DS_Store
+Thumbs.db
+*.bat

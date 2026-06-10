@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # ── 阿里云百炼 (DashScope) 配置 ──
     DASHSCOPE_API_KEY: str = ""  # 阿里云百炼 API Key，需在 .env 中填写
-    LLM_MODEL: str = "qwen-plus"  # 默认使用千问增强版模型，也可选 qwen-max / qwen-turbo
+    LLM_MODEL: str = "qwen-turbo"  # 默认使用千问增强版模型，也可选 qwen-max / qwen-turbo
     LLM_TEMPERATURE: float = 0.7  # LLM 温度参数，控制回复的随机性
     LLM_MAX_TOKENS: int = 2048  # LLM 最大输出 Token 数
 

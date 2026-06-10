@@ -17,6 +17,10 @@ from app.agent.edges import (  # 导入所有路由函数
     route_after_retrieval,
     route_after_response,
 )
+import sqlite3
+from langgraph.checkpoint.sqlite import SqliteSaver
+from app.core.db import STORAGE_DIR
+
 
 logger = logging.getLogger(__name__)  # 创建日志记录器
 
@@ -90,8 +94,18 @@ def build_graph() -> StateGraph:
     workflow.add_edge("human_service", END)  # 人工节点后结束
     workflow.add_edge("direct_response", END)  # 直接回复后结束
 
-    # ── 编译图 ──
-    compiled_graph = workflow.compile()  # 将图编译为可执行对象
+    # 2. 修改这里：使用 sqlite3 连接数据库
+    from app.core.db import STORAGE_DIR
+    db_path = str(STORAGE_DIR / "chat_database.db")
 
-    logger.info("✅ LangGraph 客服工作流构建完成!")  # 记录完成日志
-    return compiled_graph  # 返回编译后的图
+    # 建立长连接，允许跨线程使用
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+
+    # 实例化 SqliteSaver 并建表
+    memory = SqliteSaver(conn)
+    memory.setup()
+
+    compiled_graph = workflow.compile(checkpointer=memory)
+
+    logger.info("✅ LangGraph 客服工作流构建完成!")
+    return compiled_graph

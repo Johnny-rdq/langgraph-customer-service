@@ -13,7 +13,7 @@ export default function ChatArea({ session, onMessagesChange, onNewChat }) {
     isLoading,
     isStreaming,
     sendMessage,
-  } = useChat(session?.messages || [], onMessagesChange)
+  } = useChat(session?.id, session?.messages || [], onMessagesChange)
 
   // ── 消息列表底部引用（自动滚动用）──
   const bottomRef = useRef(null)

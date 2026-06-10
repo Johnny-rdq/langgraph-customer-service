@@ -4,10 +4,16 @@ PyCharm 中直接运行此文件即可启动后端 + 前端 + 自动打开浏览
 """
 import sys                                       # 系统模块
 import subprocess                                # 子进程管理，用于启动前端服务
-import webbrowser                                # 自动打开浏览器
+# import webbrowser                                # 自动打开浏览器
 import threading                                 # 多线程，后台读取前端日志
 import time                                      # 延时等待
 from pathlib import Path                         # 路径处理
+# 1. 在顶部导入这些
+from contextlib import asynccontextmanager
+from app.core.db import create_db_and_tables
+from app.api.session import router as session_router
+
+
 
 # ── 将项目根目录加入 sys.path ──
 _project_root = Path(__file__).resolve().parent.parent
@@ -100,7 +106,7 @@ def _start_frontend():
 
     # ── 自动打开浏览器 ──
     logger.info("🌐 正在打开浏览器...")
-    webbrowser.open("http://localhost:3000")
+    # webbrowser.open("http://localhost:3000")
     logger.info("✅ 前端已就绪: http://localhost:3000")
 
 
@@ -121,6 +127,7 @@ def _stop_frontend():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期：启动时拉起前端，关闭时停掉前端"""
+    create_db_and_tables()
     settings = get_settings()
     logger.info(f"🚀 {settings.APP_NAME} 正在启动...")
     logger.info(f"📡 模型: {settings.LLM_MODEL}")
@@ -156,6 +163,7 @@ app.add_middleware(
 
 # ── 注册路由 ──
 app.include_router(chat_router)
+app.include_router(session_router)
 
 
 # ── 根路由 ──

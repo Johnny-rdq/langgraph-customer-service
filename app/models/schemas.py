@@ -44,4 +44,4 @@ class ChatResponse(BaseModel):
 class HealthResponse(BaseModel):
     """健康检查响应模型"""
     status: str = Field(default="ok", description="服务状态")
-    model: str = Field(default="qwen-plus", description="当前使用的模型")
+    model: str = Field(default="qwen-turbo", description="当前使用的模型")
