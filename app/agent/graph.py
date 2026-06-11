@@ -11,6 +11,7 @@ from app.agent.nodes import (  # 导入所有节点函数
     generate_response_node,
     human_service_node,
     direct_response_node,
+    logistics_node,  # 物流查询节点
 )
 from app.agent.edges import (  # 导入所有路由函数
     route_after_intent,
@@ -18,7 +19,7 @@ from app.agent.edges import (  # 导入所有路由函数
     route_after_response,
 )
 import sqlite3
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite import SqliteSaver  # 同步版 checkpointer
 from app.core.db import STORAGE_DIR
 
 
@@ -53,6 +54,7 @@ def build_graph() -> StateGraph:
     workflow.add_node("generate_response", generate_response_node)  # 回复生成节点
     workflow.add_node("human_service", human_service_node)  # 人工客服节点
     workflow.add_node("direct_response", direct_response_node)  # 直接回复节点（闲聊）
+    workflow.add_node("logistics_node", logistics_node)  # 物流查询节点
 
     # ── 设置入口点 ──
     # 所有对话都从意图识别开始
@@ -67,6 +69,7 @@ def build_graph() -> StateGraph:
             "human_service": "human_service",  # 转人工
             "retrieve_knowledge": "retrieve_knowledge",  # 检索知识库
             "direct_response": "direct_response",  # 直接回复
+            "logistics_node": "logistics_node",  # 物流查询
         },
     )
 
@@ -93,6 +96,7 @@ def build_graph() -> StateGraph:
     # ── 普通边（无条件跳转）──
     workflow.add_edge("human_service", END)  # 人工节点后结束
     workflow.add_edge("direct_response", END)  # 直接回复后结束
+    workflow.add_edge("logistics_node", END)  # 物流查询后结束
 
     # 2. 修改这里：使用 sqlite3 连接数据库
     from app.core.db import STORAGE_DIR
@@ -101,7 +105,8 @@ def build_graph() -> StateGraph:
     # 建立长连接，允许跨线程使用
     conn = sqlite3.connect(db_path, check_same_thread=False)
 
-    # 实例化 SqliteSaver 并建表
+    # 使用同步版 SqliteSaver（模块级调用无 event loop 要求）
+    # 对 get_state / update_state / invoke 都兼容
     memory = SqliteSaver(conn)
     memory.setup()
 

@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'       // Vite 配置函数
 import react from '@vitejs/plugin-react'   // React JSX 编译插件
 
 // 后端地址：支持通过环境变量配置（Docker 部署时指向 backend 服务名）
-const API_TARGET = process.env.VITE_API_TARGET || 'http://localhost:8000'
+const API_TARGET = process.env.VITE_API_TARGET || 'http://localhost:8888'  // 默认后端端口 8888（与 main.py 硬编码端口一致）
 
 // Vite 配置 —— 构建工具的核心配置
 export default defineConfig({

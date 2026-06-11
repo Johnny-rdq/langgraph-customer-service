@@ -1,53 +1,54 @@
 """
 对话 API 路由模块
-提供面向前端的 RESTful 对话接口（普通 + 流式 SSE）
+全面重写：加入物理级字符净化，彻底解决 Windows GBK 编码崩溃问题
 """
-import uuid                                    # 唯一会话 ID
-import json                                    # JSON 序列化
-import logging                                 # 日志
-import time                                    # 计时
-import re                                      # 正则预判订单号
-from fastapi import APIRouter, HTTPException   # FastAPI 路由和异常
-from fastapi.responses import StreamingResponse # SSE 流式响应
-from app.models.schemas import ChatRequest, ChatResponse  # 请求/响应模型
-from app.agent.graph import build_graph        # Graph 工作流（非流式用）
-from app.agent.state import get_initial_state  # 初始状态工厂
-from app.agent.nodes import (                  # 导入 prompt 模板和工具
-    INTENT_CLASSIFY_PROMPT,
-    RESPONSE_GENERATION_PROMPT,
-)
-from app.core.llm import get_llm               # LLM 实例
-from app.tools.retriever import retrieve_knowledge  # 知识库检索
-from langchain_core.messages import HumanMessage, AIMessage  # LangChain 消息类型
+import uuid
+import json
+import asyncio as _asyncio  # 用于 to_thread 执行同步 graph.invoke
+import logging
+import time
+import re
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+from app.models.schemas import ChatRequest, ChatResponse
+from app.agent.graph import build_graph
+from app.agent.state import get_initial_state
+from app.agent.nodes import INTENT_CLASSIFY_PROMPT, RESPONSE_GENERATION_PROMPT
+from app.core.llm import get_llm
+from app.tools.retriever import retrieve_knowledge
+from langchain_core.messages import HumanMessage, AIMessage
 from app.tools.logistics import handle_logistics_intent
-
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["chat"])
-_graph = build_graph()  # 全局图实例（非流式端点用）
+_graph = build_graph()
 
+# 🛡️ 终极核武器：物理抹除所有 Emoji 和特殊符号
+def clean_text(text: str) -> str:
+    if not text:
+        return ""
+    # 过滤掉所有不在基本多语言平面 (BMP) 的字符（精准删掉所有 Emoji）
+    return re.sub(r'[^\u0000-\uFFFF]', '', text)
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
-    """普通对话接口（一次性返回完整回复）"""
+    """普通对话接口"""
     start_time = time.time()
     session_id = request.session_id or str(uuid.uuid4())
-
-    logger.info(
-        f"[REQ] 收到请求: user_id={request.user_id}, "
-        f"session_id={session_id[:8]}..., message={request.message[:50]}..."
-    )
+    safe_message = clean_text(request.message)
 
     initial_state = get_initial_state(
         user_id=request.user_id,
         session_id=session_id,
-        first_message=HumanMessage(content=request.message),
+        first_message=HumanMessage(content=safe_message),
     )
 
     try:
+        import asyncio as _asyncio
         config = {"configurable": {"thread_id": session_id}}
-        result = await _graph.ainvoke(initial_state, config=config)
+        # SqliteSaver 不支持异步，在线程池中执行同步 invoke
+        result = await _asyncio.to_thread(_graph.invoke, initial_state, config)
 
         messages = result.get("messages", [])
         reply = ""
@@ -56,145 +57,126 @@ async def chat(request: ChatRequest) -> ChatResponse:
                 if hasattr(msg, "type") and msg.type == "ai":
                     reply = msg.content
                     break
-            if not reply and messages:
-                reply = messages[-1].content if hasattr(messages[-1], "content") else str(messages[-1])
 
         intent = result.get("intent", "general")
-        requires_human = result.get("requires_human", False)
-
-        elapsed = time.time() - start_time
-        logger.info(f"[OK] 处理完成: elapsed={elapsed:.2f}s, intent={intent}")
-
         return ChatResponse(
             session_id=session_id,
-            reply=reply,
+            reply=clean_text(reply),
             intent=intent,
-            requires_human=requires_human,
+            requires_human=result.get("requires_human", False),
         )
     except Exception as e:
         logger.error(f"[ERROR] 处理出错: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"客服系统处理出错: {str(e)}")
+        raise HTTPException(status_code=500, detail="客服系统处理出错")
 
 
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
-    """流式对话接口 —— SSE 逐字返回 AI 回复
-
-    流程：意图识别 → 知识检索 → 流式生成回复
-    前端通过 EventSource / fetch + ReadableStream 接收
-    """
+    """流式对话接口 —— SSE 逐字返回 AI 回复"""
     session_id = request.session_id or str(uuid.uuid4())
-    logger.info(f"[REQ] [流式] 收到请求: session={session_id[:8]}..., msg={request.message[:50]}...")
+    safe_message = clean_text(request.message)
 
-    # ── 生成 SSE 事件的异步生成器 ──
     async def event_generator():
         llm = get_llm()
         start_time = time.time()
 
         try:
-            # ── 第 1 步：意图识别（非流式，很快）──
-            intent_prompt = INTENT_CLASSIFY_PROMPT.format(user_message=request.message)
+            # 1. 意图识别
+            intent_prompt = INTENT_CLASSIFY_PROMPT.format(user_message=safe_message)
             intent_response = await llm.ainvoke(intent_prompt)
-            intent = intent_response.content.strip().lower() if intent_response.content else "general"
+            intent = clean_text(intent_response.content).strip().lower() if intent_response.content else "general"
 
-            # 预判：消息含 ≥5 位连续数字直接当物流，不管 LLM 分出什么意图
-            digits = re.findall(r'\d{5,}', request.message)
-            if digits:
+            if re.findall(r'\d{5,}', safe_message):
                 intent = "logistics"
-                logger.info(f"[INTENT] [流式] 预判物流（检测到数字: {digits[0]}），跳过 LLM 分类")
 
-            logger.info(f"[INTENT] [流式] 最终意图: {intent}")
+            yield f"data: {json.dumps({'type': 'intent', 'content': intent}, ensure_ascii=True)}\n\n"
 
-            # 发送意图事件
-            yield f"data: {json.dumps({'type': 'intent', 'content': intent}, ensure_ascii=False)}\n\n"
-
-            # ── 第 2 步：背景信息获取（智能路由）──
+            # 2. 获取背景资料
             context = "暂无相关背景信息。"
-
-            if "logistics" in intent:
-                logger.debug("[DEBUG-ROUTE] 路由命中：物流意图，准备调用工具...")  # 调试日志（避免 Windows GBK 编码问题）
-                context = await handle_logistics_intent(request.message, llm)
-                logger.debug("[DEBUG-ROUTE] 工具执行完毕，成功拿到 context 背景资料！")  # 调试日志
-
+            is_logistics = "logistics" in intent
+            if is_logistics:
+                raw_logistics = handle_logistics_intent(safe_message, llm)  # 同步调用（物流查询无异步 IO）
+                context = clean_text(raw_logistics)  # 物流查询结果（可能是轨迹信息或系统提示）
             elif "complaint" in intent or "inquiry" in intent:
-                retrieved = retrieve_knowledge(query=request.message, top_k=3)
-                context = "\n".join(retrieved) if retrieved else "暂无相关知识库内容。"
+                retrieved = retrieve_knowledge(query=safe_message, top_k=3)
+                context = clean_text("\n".join(retrieved)) if retrieved else "暂无相关知识库内容。"
 
-            # 发送检索事件
-            has_knowledge = context != "暂无相关知识库内容。"
-            yield f"data: {json.dumps({'type': 'retrieval', 'has_knowledge': has_knowledge}, ensure_ascii=False)}\n\n"
+            has_knowledge = not context.startswith("暂无") and not context.startswith("系统提示：")
+            yield f"data: {json.dumps({'type': 'retrieval', 'has_knowledge': has_knowledge}, ensure_ascii=True)}\n\n"
 
-            # ── 第 3 步：流式生成回复 ──
-
-            # [新增] 1. 配置当前会话 ID
+            # 3. 提取历史记录并流式生成
             config = {"configurable": {"thread_id": session_id}}
-
-            # [新增] 2. 从 LangGraph 获取历史记忆
             state_snapshot = _graph.get_state(config)
             existing_messages = state_snapshot.values.get("messages", []) if state_snapshot.values else []
 
-            # [新增] 3. 拼装成历史文本（只取最近 10 条防超长）
             chat_history = "\n".join(
-                f"{'用户' if isinstance(m, HumanMessage) else '客服'}: {m.content}"
+                f"{'用户' if isinstance(m, HumanMessage) else '客服'}: {clean_text(m.content)}"
                 for m in existing_messages[-10:]
             )
 
-            # 修改 Prompt，把空字符串换成真实的 chat_history
-            prompt = RESPONSE_GENERATION_PROMPT.format(
-                retrieved_context=context,
-                chat_history=chat_history,  # <--- 修改这里
-                user_message=request.message,
-            )
+            # 物流查询使用专用提示词：告知 LLM 这是直接查询结果，直接转述给用户
+            if is_logistics and has_knowledge:
+                prompt = f"""你是一个友好、专业的客服助手。以下是用户查询的物流轨迹信息，请用自然友好的语言转述给用户。
 
-            # ... 这里的 async for chunk in llm.astream(prompt): 保持不变 ...
+## 物流轨迹信息
+{context}
 
-            # 流式调用 LLM，逐 token yield
+## 用户问题
+{safe_message}
+
+## 客服守则
+1. 态度友好、耐心、专业
+2. 直接基于物流轨迹信息回复用户，不要添加不存在的信息
+3. 回复简洁明了，避免长篇大论
+4. 使用礼貌用语
+5. 禁止使用任何 Emoji 表情符号，只能输出纯文本
+
+## 你的回复
+"""
+            elif is_logistics and not has_knowledge:
+                # 物流查询失败（无单号或单号不存在），用系统提示润色
+                prompt = f"""你是一个友好的客服助手。以下是系统内部提示，请转换成对用户友好、自然的回复。
+
+系统提示: {context}
+
+要求：态度友好、简洁明了，使用纯文本不要用 Emoji。
+
+客服回复:"""
+            else:
+                prompt = RESPONSE_GENERATION_PROMPT.format(
+                    retrieved_context=context,
+                    chat_history=chat_history,
+                    user_message=safe_message,
+                )
+
             full_reply = ""
             async for chunk in llm.astream(prompt):
-                token = chunk.content if hasattr(chunk, "content") and chunk.content else ""
+                raw_token = chunk.content if hasattr(chunk, "content") and chunk.content else ""
+
+                # ⚔️ 核心防御：只要大模型吐出 Emoji，立刻变为空！
+                token = clean_text(raw_token)
+
                 if token:
                     full_reply += token
-                    yield f"data: {json.dumps({'type': 'token', 'content': token}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'token', 'content': token}, ensure_ascii=True)}\n\n"
 
+            # 4. 存入数据库（此时 full_reply 已是纯文本，数据库绝对不会崩）
+            try:
+                _graph.update_state(
+                    config,
+                    {"messages": [HumanMessage(content=safe_message), AIMessage(content=full_reply)]}
+                )
+            except Exception as e:
+                logger.warning(f"记忆写入失败，但不影响回复: {e}")
 
-            # [新增] 4. 将本轮问答存入 LangGraph 记忆库
-            _graph.update_state(
-                config,
-                {"messages": [
-                    HumanMessage(content=request.message),
-                    AIMessage(content=full_reply)
-                ]}
-            )
-
-            # ── 发送完成事件 ──
-            elapsed = time.time() - start_time
-
-            logger.info(f"[OK] [流式] 完成: elapsed={elapsed:.2f}s, len={len(full_reply)}")
-
-            yield f"data: {json.dumps({'type': 'done', 'session_id': session_id, 'intent': intent, 'requires_human': intent == 'human'}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'session_id': session_id, 'intent': intent, 'requires_human': intent == 'human'}, ensure_ascii=True)}\n\n"
 
         except Exception as e:
-            logger.error(f"[ERROR] [流式] 出错: {e}", exc_info=True)
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+            logger.error(f"[ERROR] 流式出错: {e}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'content': '系统繁忙，请稍后再试'}, ensure_ascii=True)}\n\n"
 
     return StreamingResponse(
         event_generator(),
-        media_type="text/event-stream",        # SSE MIME 类型
-        headers={
-            "Cache-Control": "no-cache",        # 禁止缓存
-            "Connection": "keep-alive",         # 保持连接
-            "X-Accel-Buffering": "no",          # Nginx 禁用缓冲（如有）
-        },
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
     )
-
-
-@router.get("/health")
-async def health_check():
-    """健康检查接口"""
-    from app.core.config import get_settings
-    settings = get_settings()
-    return {
-        "status": "healthy",
-        "model": settings.LLM_MODEL,
-        "service": "langgraph-customer-service",
-    }

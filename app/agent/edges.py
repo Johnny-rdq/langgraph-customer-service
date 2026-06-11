@@ -31,8 +31,10 @@ def route_after_intent(state: AgentState) -> str:
 
     if intent == "human":
         return "human_service"  # 用户要求转人工
-    elif intent in ("complaint", "inquiry", "logistics"):
-        return "retrieve_knowledge"  # 投诉/咨询/物流，先查知识库
+    elif intent == "logistics":
+        return "logistics_node"  # 物流查询，走物流专用节点
+    elif intent in ("complaint", "inquiry"):
+        return "retrieve_knowledge"  # 投诉/咨询，先查知识库
     else:
         return "direct_response"  # 闲聊或未知意图，直接回复
 
