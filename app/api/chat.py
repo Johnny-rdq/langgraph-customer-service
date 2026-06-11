@@ -6,6 +6,7 @@ import uuid                                    # 唯一会话 ID
 import json                                    # JSON 序列化
 import logging                                 # 日志
 import time                                    # 计时
+import re                                      # 正则预判订单号
 from fastapi import APIRouter, HTTPException   # FastAPI 路由和异常
 from fastapi.responses import StreamingResponse # SSE 流式响应
 from app.models.schemas import ChatRequest, ChatResponse  # 请求/响应模型
@@ -95,7 +96,14 @@ async def chat_stream(request: ChatRequest):
             intent_prompt = INTENT_CLASSIFY_PROMPT.format(user_message=request.message)
             intent_response = await llm.ainvoke(intent_prompt)
             intent = intent_response.content.strip().lower() if intent_response.content else "general"
-            logger.info(f"📌 [流式] 意图: {intent}")
+
+            # 预判：消息含 5-12 位数字大概率是物流单号，强制修正意图避免 LLM 分错
+            digits = re.findall(r'\d{5,12}', request.message)
+            if digits and intent not in ("human", "complaint"):
+                intent = "logistics"
+                logger.info(f"📌 [流式] 预判物流意图（检测到数字: {digits[0]}），跳过 LLM 分类")
+
+            logger.info(f"📌 [流式] 最终意图: {intent}")
 
             # 发送意图事件
             yield f"data: {json.dumps({'type': 'intent', 'content': intent}, ensure_ascii=False)}\n\n"
