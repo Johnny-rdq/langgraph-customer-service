@@ -25,13 +25,17 @@ export default function useChat(sessionId, initialMessages = [], onMessagesChang
   const userIdRef = useRef('user_' + generateMsgId())              // DP 用户唯一标识（页面级）
   const abortRef = useRef(null)                                    // DP AbortController，用于取消请求
 
-  // DP ── 监听会话切换，同步更新状态和 ref ──
+  // DP 切换会话时清空流式状态
   useEffect(() => {
-    setMessages(initialMessages)  // DP 切换会话时替换消息列表
-    sessionIdRef.current = sessionId  // DP 更新 session ref
     setStreamingContent('')  // DP 清空流式缓冲区
     setError(null)  // DP 清空错误
-  }, [sessionId])  // DP 当 sessionId 变化时触发
+  }, [sessionId])  // DP 仅 sessionId 变化时触发
+
+  // DP 同步外部 messages 到内部状态（切会话重置 + loadMessages 异步加载完成）
+  useEffect(() => {
+    setMessages(initialMessages)  // DP 外部消息列表变化 → 同步到 useChat 内部
+    sessionIdRef.current = sessionId  // DP 更新 session ref
+  }, [sessionId, initialMessages])  // DP ID 变或消息加载完成都触发
 
   // DP ── 更新消息（同时通知父组件）──
   const updateMessages = useCallback(
