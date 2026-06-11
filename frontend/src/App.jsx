@@ -92,7 +92,7 @@ export default function App() {
     [sessions, activeSessionId]  // DP 依赖
   )
 
-  // DP 保存单条消息到后端数据库
+  // DP 保存单条消息到后端数据库 + 第一条用户消息自动设为会话标题
   const saveMessage = useCallback(async (sessionId, role, content) => {
     try {
       const res = await fetch(`${API_BASE}/${sessionId}/messages`, {
@@ -101,6 +101,19 @@ export default function App() {
         body: JSON.stringify({ role, content }),  // DP 请求体
       })
       if (!res.ok) throw new Error('DP 保存消息失败')
+
+      // DP 如果是用户消息，取前 30 字自动更新侧边栏标题
+      if (role === 'user') {
+        const title = content.slice(0, 30) + (content.length > 30 ? '…' : '')  // DP 截断取前 30 字
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === sessionId && s.title === '新对话'
+              ? { ...s, title }  // DP 替换默认标题
+              : s  // DP 其他会话不动
+          )
+        )
+      }
+
       return await res.json()  // DP 返回保存结果
     } catch (err) {
       console.error('DP 保存消息失败:', err)
@@ -108,38 +121,13 @@ export default function App() {
     }
   }, [])
 
-  // DP 更新会话标题
-  const updateSessionTitle = useCallback(async (sessionId, title) => {
-    try {
-      await fetch(
-        `${API_BASE}/${sessionId}?title=${encodeURIComponent(title)}`,  // DP query string
-        { method: 'PATCH' }  // DP PATCH
-      )
-      setSessions((prev) =>
-        prev.map((s) => (s.id === sessionId ? { ...s, title } : s))  // DP 同步本地标题
-      )
-    } catch (err) {
-      console.error('DP 更新标题失败:', err)
-    }
-  }, [])
-
   // DP 消息变更回调（useChat 每次有新消息时触发）
   const handleMessagesChange = useCallback(
-    async (messages) => {
+    (messages) => {
       if (!activeSessionId) return  // DP 无活跃会话则忽略
       setActiveMessages(messages)  // DP 更新消息状态
-
-      // DP 自动更新会话标题：取第一条用户消息的前 30 字
-      const firstUserMsg = messages.find((m) => m.role === 'user')  // DP 第一条用户消息
-      if (firstUserMsg) {
-        const currentSession = sessions.find((s) => s.id === activeSessionId)  // DP 当前会话
-        if (currentSession && currentSession.title === '新对话') {  // DP 标题仍是默认值
-          const title = firstUserMsg.content.slice(0, 30) + (firstUserMsg.content.length > 30 ? '…' : '')  // DP 截断
-          updateSessionTitle(activeSessionId, title)  // DP 调 API 更新
-        }
-      }
     },
-    [activeSessionId, sessions, updateSessionTitle]  // DP 依赖
+    [activeSessionId]  // DP 依赖
   )
 
   // DP 当前活跃的会话对象
