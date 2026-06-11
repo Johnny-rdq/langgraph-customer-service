@@ -5,15 +5,15 @@ import ChatInput from './ChatInput.jsx'                          // 输入框组
 import WelcomeScreen from './WelcomeScreen.jsx'                  // 欢迎页组件
 import useChat from '../hooks/useChat.js'                        // 聊天逻辑 Hook
 
-export default function ChatArea({ session, onMessagesChange, onNewChat }) {
-  // ── 使用聊天 Hook ──
+export default function ChatArea({ session, messages, onMessagesChange, onNewChat, onSaveMessage }) {
+  // ── 使用聊天 Hook（传入外部 messages，不再从 session 读）──
   const {
-    messages,
+    messages: hookMessages,
     streamingContent,
     isLoading,
     isStreaming,
     sendMessage,
-  } = useChat(session?.id, session?.messages || [], onMessagesChange)
+  } = useChat(session?.id, messages, onMessagesChange, onSaveMessage)
 
   // ── 消息列表底部引用（自动滚动用）──
   const bottomRef = useRef(null)
@@ -21,23 +21,23 @@ export default function ChatArea({ session, onMessagesChange, onNewChat }) {
   // ── 新消息 / 流式文字更新时自动滚动到底部 ──
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamingContent, isLoading])
+  }, [hookMessages, streamingContent, isLoading])
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full">
       {/* 消息区域 */}
       <div className="flex-1 overflow-y-auto">
-        {!session || messages.length === 0 ? (
+        {!session || hookMessages.length === 0 ? (
           /* 没有会话或消息为空时显示欢迎页 */
           <WelcomeScreen onSend={sendMessage} onNewChat={onNewChat} />
         ) : (
           <div className="max-w-4xl mx-auto">
             {/* 已完成的消息列表 */}
-            {messages.map((msg, idx) => (
+            {hookMessages.map((msg, idx) => (
               <MessageItem
                 key={msg.id}
                 message={msg}
-                isLast={idx === messages.length - 1 && !isStreaming}
+                isLast={idx === hookMessages.length - 1 && !isStreaming}
               />
             ))}
 

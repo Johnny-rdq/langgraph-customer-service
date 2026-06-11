@@ -9,7 +9,7 @@ const generateMsgId = () => crypto.randomUUID?.() || Math.random().toString(36).
 /**
  * 聊天逻辑 Hook —— 支持流式输出（逐字显示）
  */
-export default function useChat(sessionId, initialMessages = [], onMessagesChange) {
+export default function useChat(sessionId, initialMessages = [], onMessagesChange, onSaveMessage) {
   // ── 状态 ──
   const [messages, setMessages] = useState(initialMessages)       // 消息列表
   const [isLoading, setIsLoading] = useState(false)                // 是否正在等待回复
@@ -17,8 +17,7 @@ export default function useChat(sessionId, initialMessages = [], onMessagesChang
   const [error, setError] = useState(null)                         // 错误信息
   const sessionIdRef = useRef(sessionId)                               // 后端会话 ID
   const userIdRef = useRef('user_' + generateMsgId())              // 用户唯一标识
-  const abortRef = useRef(null)
-  // AbortController，用于取消请求
+  const abortRef = useRef(null)                                    // AbortController，用于取消请求
 
   // ── 监听会话切换，同步更新 UI 和 Backend ID ──
   useEffect(() => {
@@ -46,6 +45,11 @@ export default function useChat(sessionId, initialMessages = [], onMessagesChang
       const userMsg = { id: generateMsgId(), role: 'user', content: content.trim() }
       const updatedMessages = [...messages, userMsg]
       updateMessages(updatedMessages)
+
+      // ── 持久化用户消息到后端数据库 ──
+      if (onSaveMessage && sessionIdRef.current) {
+        onSaveMessage(sessionIdRef.current, 'user', content.trim())
+      }
 
       // 准备流式接收
       setIsLoading(true)
@@ -136,6 +140,11 @@ export default function useChat(sessionId, initialMessages = [], onMessagesChang
         }
         updateMessages([...updatedMessages, aiMsg])
         setStreamingContent('')  // 清空流式缓冲区
+
+        // ── 持久化 AI 回复到后端数据库 ──
+        if (onSaveMessage && finalSessionId) {
+          onSaveMessage(finalSessionId, 'assistant', fullContent || '（未收到有效回复）')
+        }
 
       } catch (err) {
         if (err.name === 'AbortError') {

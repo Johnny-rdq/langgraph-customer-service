@@ -41,6 +41,12 @@ class ChatResponse(BaseModel):
     )
 
 
+class SaveMessageRequest(BaseModel):
+    """保存消息的请求体"""
+    role: str = Field(..., pattern="^(user|assistant)$", description="消息角色")
+    content: str = Field(..., min_length=1, max_length=10000, description="消息内容")
+
+
 class HealthResponse(BaseModel):
     """健康检查响应模型"""
     status: str = Field(default="ok", description="服务状态")
