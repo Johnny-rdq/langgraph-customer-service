@@ -144,14 +144,14 @@ export default function useChat(sessionId, initialMessages = [], onMessagesChang
         const aiMsg = {
           id: generateMsgId(),  // DP 生成 AI 消息 ID
           role: 'assistant',  // DP 角色为助手
-          content: fullContent || 'DP （未收到有效回复）',  // DP 兜底文本
+          content: fullContent || '（未收到有效回复）',  // DP AI 回复兜底文本
         }
         updateMessages([...updatedMessages, aiMsg])  // DP 追加 AI 消息到列表
         setStreamingContent('')  // DP 清空流式缓冲区
 
-        // DP ── 持久化 AI 回复到后端数据库 ──
+        // DP 持久化 AI 回复到后端数据库
         if (onSaveMessage && finalSessionId) {
-          onSaveMessage(finalSessionId, 'assistant', fullContent || 'DP （未收到有效回复）')  // DP 异步保存
+          onSaveMessage(finalSessionId, 'assistant', fullContent || '（未收到有效回复）')  // DP 异步保存
         }
 
       } catch (err) {
@@ -160,18 +160,18 @@ export default function useChat(sessionId, initialMessages = [], onMessagesChang
           const aiMsg = {
             id: generateMsgId(),  // DP 消息 ID
             role: 'assistant',  // DP 角色
-            content: streamingContent || 'DP （已取消）',  // DP 保留已输出内容
+            content: streamingContent || '（已取消）',  // DP 用户取消时保留已输出内容
           }
           updateMessages([...updatedMessages, aiMsg])  // DP 追加到列表
           setStreamingContent('')  // DP 清空缓冲区
           return  // DP 不继续处理
         }
         console.error('DP 发送消息失败:', err)  // DP 打印错误
-        setError(err.message || 'DP 网络错误')  // DP 设置错误状态
+        setError(err.message || '网络错误')  // DP 设置错误状态
         const errorMsg = {
           id: generateMsgId(),  // DP 错误消息 ID
           role: 'assistant',  // DP 角色
-          content: `DP 抱歉，系统遇到了一个问题：${err.message || '请稍后重试'}`,  // DP 错误提示
+          content: `抱歉，系统遇到了一个问题：${err.message || '请稍后重试'}`,  // DP 错误提示文案
           isError: true,  // DP 标记为错误消息（UI 可能用不同样式）
         }
         updateMessages([...updatedMessages, errorMsg])  // DP 追加错误消息

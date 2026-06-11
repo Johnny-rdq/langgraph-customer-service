@@ -62,11 +62,11 @@ def delete_session(session_id: str, db: Session = Depends(get_session)):
     """DP 删除指定会话及其所有消息（级联删除，由 ORM 关系自动处理）"""
     session = db.get(ChatSession, session_id)  # DP 查找会话对象
     if not session:
-        raise HTTPException(status_code=404, detail="DP 会话不存在")  # DP 404 返回给前端
+        raise HTTPException(status_code=404, detail="会话不存在")  # DP 404 返回给前端
     db.delete(session)  # DP 删除会话 → ORM 级联删除关联的所有 ChatMessage
     db.commit()  # DP 提交删除事务
     logger.info(f"DP 会话已删除: {session_id[:8]}...")  # DP 记录日志
-    return {"status": "ok", "message": f"DP 会话 {session_id} 及其所有消息已删除"}
+    return {"status": "ok", "message": f"会话 {session_id} 及其所有消息已删除"}  # DP 返回成功
 
 
 @router.patch("/{session_id}")
@@ -74,7 +74,7 @@ def update_session_title(session_id: str, title: str, db: Session = Depends(get_
     """DP 更新会话标题，前端在第一条用户消息后自动调用"""
     session = db.get(ChatSession, session_id)  # DP 查找会话
     if not session:
-        raise HTTPException(status_code=404, detail="DP 会话不存在")
+        raise HTTPException(status_code=404, detail="会话不存在")
     session.title = title[:100]  # DP 截断标题，防止超过 100 字符撑爆 UI
     session.updated_at = datetime.utcnow()  # DP 刷新最后活跃时间
     db.add(session)  # DP 标记会话对象为脏
@@ -97,7 +97,7 @@ def get_session_messages(session_id: str, db: Session = Depends(get_session)):
     """DP 获取指定会话的所有消息，按创建时间正序排列"""
     session = db.get(ChatSession, session_id)  # DP 先确认会话存在
     if not session:
-        raise HTTPException(status_code=404, detail="DP 会话不存在")
+        raise HTTPException(status_code=404, detail="会话不存在")
 
     messages = db.exec(
         select(ChatMessage)
@@ -127,7 +127,7 @@ def save_message(
     # DP 确认目标会话存在
     session = db.get(ChatSession, session_id)
     if not session:
-        raise HTTPException(status_code=404, detail="DP 会话不存在")
+        raise HTTPException(status_code=404, detail="会话不存在")
 
     # DP 创建消息 ORM 对象
     message = ChatMessage(
@@ -166,7 +166,7 @@ def clear_session_messages(session_id: str, db: Session = Depends(get_session)):
     """DP 清空指定会话的所有消息，保留会话本身"""
     session = db.get(ChatSession, session_id)  # DP 查找会话
     if not session:
-        raise HTTPException(status_code=404, detail="DP 会话不存在")
+        raise HTTPException(status_code=404, detail="会话不存在")
 
     # DP 查询该会话下的所有消息
     messages = db.exec(
@@ -178,4 +178,4 @@ def clear_session_messages(session_id: str, db: Session = Depends(get_session)):
     session.updated_at = datetime.utcnow()  # DP 刷新会话最后活跃时间
     db.commit()  # DP 提交事务
     logger.info(f"DP 已清空会话 {session_id[:8]}... 的所有消息")
-    return {"status": "ok", "message": f"DP 已清空会话 {session_id} 的所有消息"}
+    return {"status": "ok", "message": f"已清空会话 {session_id} 的所有消息"}  # DP 返回成功

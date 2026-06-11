@@ -1,49 +1,68 @@
 """DP 物流查询工具模块
-DP 提供订单号提取 + 模拟物流轨迹查询功能。
+DP 提供订单号提取 + 物流轨迹查询功能。
 DP 双策略：先用正则提取数字（快速），失败时走 LLM 兜底识别。
-DP 模拟数据涵盖顺丰/京东/圆通/中通/韵达 5 家快递，12 条物流轨迹。
+DP 物流数据从 data/logistics_data.txt 文件加载，方便动态扩充。
 """
-import logging  # DP 日志模块，记录运行状态
-import re  # DP 正则表达式，提取订单号中的数字
+import logging  # DP 日志模块
+import re  # DP 正则表达式提取订单号
+from pathlib import Path  # DP 跨平台文件路径处理
 from langchain_core.language_models.chat_models import BaseChatModel  # DP LLM 基类类型标注
 
-logger = logging.getLogger(__name__)  # DP 当前模块的日志记录器
+logger = logging.getLogger(__name__)  # DP 当前模块日志记录器
 
 # ═══════════════════════════════════════════════════════════
-# DP 模拟物流数据库 —— 涵盖常见物流状态
+# DP 从 data/logistics_data.txt 加载物流模拟数据
+# DP 格式：订单号 | 物流信息，每行一条，支持 # 注释
 # ═══════════════════════════════════════════════════════════
 
-MOCK_LOGISTICS_DB = {
-    # ── 顺丰速运 ──
-    "123456": "【顺丰速运】运单号 SF1234567890。您的包裹已到达北京市朝阳区运转中心，快递员张师傅（13800001111）正在派件中，预计今日 18:00 前送达。共 2 件包裹，请注意查收。",
-    "234567": "【顺丰速运】运单号 SF2345678901。包裹已从深圳市南山区集散中心发出，正在运往广州市天河区途中。预计明天上午到达。当前运输车辆已进入广深高速。",
-    "345678": "【顺丰速运】运单号 SF3456789012。您的包裹已在上海市浦东新区完成揽收，快递员李师傅（13900002222）已取件。预计 2 天后送达北京市海淀区。",
+def _load_logistics_db() -> dict:
+    """DP 从 data/logistics_data.txt 文件加载物流模拟数据库
 
-    # ── 京东物流 ──
-    "456789": "【京东物流】运单号 JD4567890123。包裹已到达成都市武侯区京东亚洲一号仓库，已完成分拣，准备发往重庆市渝中区。预计明天 14:00 前送达。",
-    "567890": "【京东物流】运单号 JD5678901234。您的包裹已由京东自营配送站发出，配送员王师傅（13700003333）正在赶往您的地址。预计 2 小时内送达。",
-    "678901": "【京东物流】运单号 JD6789012345。包裹在武汉市东西湖区京东仓库已打包完成，正在等待揽收。预计今天 18:00 前出库。",
+    DP 文件格式: 每行一条记录，用 | 分隔订单号和物流信息。
+    DP 以 # 开头的行视为注释，空行自动跳过。
 
-    # ── 圆通速递 ──
-    "789012": "【圆通速递】运单号 YT7890123456。您的包裹已到达杭州市西湖区转运中心，正在分拣中。下一站运往南京市鼓楼区，预计后天送达。",
-    "890123": "【圆通速递】运单号 YT8901234567。包裹在广州市白云区已揽收成功，快递员正在返回网点途中。预计 3 天后送达西安市雁塔区。",
+    Returns:
+        DP dict: {订单号: 物流轨迹文本}
+    """
+    db = {}  # DP 订单号 → 物流信息的映射
+    # DP 文件路径：项目根目录 / data / logistics_data.txt
+    file_path = Path(__file__).resolve().parent.parent.parent / "data" / "logistics_data.txt"
 
-    # ── 中通快递 ──
-    "901234": "【中通快递】运单号 ZT9012345678。您的包裹已到达长沙市芙蓉区网点，正在派件中，快递员陈师傅（13600004444）。请注意接听电话。",
-    "112233": "【中通快递】运单号 ZT1122334455。包裹在郑州市金水区已完成分拣，由郑州发往济南市的干线运输中。当前车辆位置：G4 京港澳高速河南段。预计明天傍晚到达。",
+    if not file_path.exists():  # DP 文件不存在时返回空库
+        logger.warning(f"DP 物流数据文件不存在: {file_path}")
+        return db
 
-    # ── 韵达快递 ──
-    "223344": "【韵达快递】运单号 YD2233445566。包裹已到达昆明市五华区韵达转运中心，正在卸车分拣。预计明天上午开始派送。",
-    "334455": "【韵达快递】运单号 YD3344556677。您的包裹已在福州市鼓楼区完成签收。签收人：本人签收。如有疑问请联系韵达客服 95546。",
-}
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:  # DP UTF-8 读取
+            for raw_line in f:
+                line = raw_line.strip()  # DP 去首尾空白
+                if not line or line.startswith("#"):  # DP 跳过空行和注释行
+                    continue
+                if "|" not in line:  # DP 跳过格式不正确的行
+                    continue
+                parts = line.split("|", 1)  # DP 按第一个 | 分割（最多 2 段）
+                if len(parts) != 2:
+                    continue
+                order_id = parts[0].strip()  # DP 订单号
+                info = parts[1].strip()  # DP 物流轨迹文本
+                if order_id and info:  # DP 双方都非空才入库
+                    db[order_id] = info
+        logger.info(f"DP 物流数据加载完成: 共 {len(db)} 条记录")
+    except Exception as e:
+        logger.error(f"DP 加载物流数据文件失败: {e}")  # DP 文件读取异常不阻塞服务
+
+    return db
+
+
+# DP 全局物流数据库（模块加载时一次性读取）
+MOCK_LOGISTICS_DB = _load_logistics_db()
 
 
 def query_mock_db(order_id: str) -> str:
-    """DP 根据订单号查询模拟物流数据库
+    """DP 根据订单号查询物流数据库
 
-    DP 支持 6 位纯数字订单号（如 123456）。
-    DP 如果订单号为空，返回引导话术让客服询问用户。
-    DP 如果订单号不在库中，返回核对单号的建议。
+    DP 订单号为空时返回引导话术让客服询问用户。
+    DP 订单号不在库中时返回核对建议。
 
     Args:
         order_id: DP 提取到的订单号（纯数字字符串）
@@ -51,18 +70,17 @@ def query_mock_db(order_id: str) -> str:
     Returns:
         DP 物流状态文本，供 LLM 嵌入回复使用
     """
-    if not order_id:
-        # DP 用户未提供订单号，返回引导提示
+    if not order_id:  # DP 用户未提供订单号
         return (
             "系统提示：用户未提供订单号，请在回复中礼貌地询问用户具体的订单号（6位数字，如 123456），"
             "或者请用户提供快递单号（以 SF/JD/YT/ZT/YD 开头）。"
         )
 
-    result = MOCK_LOGISTICS_DB.get(order_id)  # DP 在模拟库中查找
+    result = MOCK_LOGISTICS_DB.get(order_id)  # DP 查库
     if result:
-        return result  # DP 找到，返回物流轨迹
+        return result  # DP 命中
 
-    # DP 未找到该订单号的记录
+    # DP 未命中
     return (
         f"系统提示：在物流系统中未查到订单号 {order_id} 的物流信息。"
         "请在回复中安抚用户情绪，建议核对订单号是否正确，"
@@ -72,40 +90,39 @@ def query_mock_db(order_id: str) -> str:
 
 
 async def handle_logistics_intent(user_message: str, llm: BaseChatModel) -> str:
-    """DP 物流查询意图处理函数（异步）
+    """DP 物流查询意图处理（异步）
 
     DP 双策略提取订单号：
     DP   策略一：正则直接提取数字 —— 零延迟，不消耗 LLM Token
-    DP   策略二：LLM 语义识别 —— 兜底，处理"帮我查下快递"之类无数字的消息
+    DP   策略二：LLM 语义识别 —— 兜底处理"帮我查下快递"之类的消息
 
     Args:
         user_message: DP 用户发送的原始消息文本
-        llm: DP 阿里云百炼 LLM 实例（用于策略二的兜底）
+        llm: DP 阿里云百炼 LLM 实例
 
     Returns:
-        DP 物流查询结果的文本内容
+        DP 物流查询结果文本
     """
-    print("\n▶️ [DEBUG-1] DP 进入物流查询工具函数！")
+    print("\n▶️ [DEBUG-1] DP 进入物流查询工具！")
 
     try:
         # ════════════════════════════════════════════════════
-        # DP 策略一：正则提取数字（快速路径）
+        # DP 策略一：正则提取数字（快速路径，零 LLM 消耗）
         # ════════════════════════════════════════════════════
-        print("🔍 [DEBUG-2] DP 正在用正则提取数字...")
+        print("🔍 [DEBUG-2] DP 正则提取数字...")
         digits = re.findall(r'\d+', user_message)  # DP 匹配所有连续数字
 
         if digits:
-            order_id = digits[0]  # DP 取第一个数字串作为订单号
-            # DP 过滤掉明显不是订单号的数字（如手机号 11 位、邮编 6 位等特殊情况）
-            # DP 实际业务中订单号为 6 位，但用户可能只说出部分，所以做个宽泛匹配
-            if len(order_id) >= 5 and len(order_id) <= 12:
-                print(f"🎯 [DEBUG-3] DP 正则提取成功！订单号: '{order_id}'，跳过 LLM 调用")
-                return query_mock_db(order_id)  # DP 直接查库返回
+            order_id = digits[0]  # DP 取第一个数字串
+            # DP 过滤：订单号通常在 5-12 位之间
+            if 5 <= len(order_id) <= 12:
+                print(f"🎯 [DEBUG-3] DP 正则命中！订单号: '{order_id}'，跳过 LLM")
+                return query_mock_db(order_id)  # DP 直接查库
 
         # ════════════════════════════════════════════════════
         # DP 策略二：LLM 语义识别（兜底路径）
         # ════════════════════════════════════════════════════
-        print("📝 [DEBUG-4] DP 正则未提取到有效订单号，正在请求 LLM 识别...")
+        print("📝 [DEBUG-4] DP 正则未命中，调用 LLM 识别...")
 
         prompt = (
             "请从用户的这句话中找出订单号，只输出订单号数字，不要有任何其他字符。"
@@ -113,22 +130,19 @@ async def handle_logistics_intent(user_message: str, llm: BaseChatModel) -> str:
             f"用户的话：'{user_message}'"
         )
 
-        response = await llm.ainvoke(prompt)  # DP 异步调用 LLM 识别订单号
-        ans = response.content.strip()  # DP 去除首尾空白
-        print(f"🤖 [DEBUG-5] DP LLM 响应成功！返回文本: '{ans}'")
+        response = await llm.ainvoke(prompt)  # DP 异步调用 LLM
+        ans = response.content.strip()  # DP 去空白
+        print(f"🤖 [DEBUG-5] DP LLM 返回: '{ans}'")
 
-        if "无" in ans or not ans:
-            # DP LLM 也未识别到订单号
-            print("⚠️ [DEBUG-6] DP LLM 判定用户没有提供订单号")
+        if "无" in ans or not ans:  # DP 未识别到
+            print("⚠️ [DEBUG-6] DP LLM 判定无订单号")
             return query_mock_db("")
 
-        # DP 清洗 LLM 返回内容，再次正则提取数字
-        clean_digits = re.findall(r'\d+', ans)  # DP 从 LLM 回复中提取纯数字
-        order_id = clean_digits[0] if clean_digits else ""  # DP 取第一个数字串
-        print(f"🎯 [DEBUG-7] DP 从 LLM 回复中清洗出订单号: '{order_id}'")
-        return query_mock_db(order_id)  # DP 根据清洗后的订单号查询
+        clean_digits = re.findall(r'\d+', ans)  # DP 清洗 LLM 回复中的数字
+        order_id = clean_digits[0] if clean_digits else ""  # DP 取第一个
+        print(f"🎯 [DEBUG-7] DP 从 LLM 回复清洗出订单号: '{order_id}'")
+        return query_mock_db(order_id)  # DP 查库
 
     except Exception as e:
-        # DP LLM 调用或正则处理异常时的兜底
         print(f"❌ [DEBUG-ERROR] DP 物流工具异常: {e}")
         return "系统提示：物流查询系统暂时繁忙，请在回复中向用户致歉，并建议稍后重试或联系人工客服。"
