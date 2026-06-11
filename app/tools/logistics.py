@@ -46,8 +46,12 @@ def _load_logistics_db() -> dict:
                 order_id = parts[0].strip()  # 订单号
                 info = parts[1].strip()  # 物流轨迹文本
                 if order_id and info:  # 双方都非空才入库
-                    db[order_id] = info
-        logger.info(f"物流数据加载完成: 共 {len(db)} 条记录")
+                    db[order_id] = info  # 主索引：订单号
+                    # 副索引：从物流文本中提取数字串（运单号），也映射到同一条记录
+                    for num in re.findall(r'\d{6,}', info):
+                        if num != order_id and num not in db:
+                            db[num] = info  # 运单号数字也指向同一物流信息
+        logger.info(f"物流数据加载完成: 共 {len(db)} 条记录（含运单号副索引）")
     except Exception as e:
         logger.error(f"加载物流数据文件失败: {e}")  # 文件读取异常不阻塞服务
 
