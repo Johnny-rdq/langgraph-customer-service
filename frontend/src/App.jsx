@@ -63,17 +63,20 @@ export default function App() {
       const res = await fetch(API_BASE, { method: 'POST' })  // DP POST /api/v1/sessions/
       if (!res.ok) throw new Error('DP 创建会话失败')
       const newSession = await res.json()  // DP 解析新建的会话
+      setActiveMessages([])  // DP 必须在 setActiveSessionId 之前清空，React 18 会批量合并到同一帧渲染
       setSessions((prev) => [newSession, ...prev])  // DP 插入到列表顶部
-      setActiveSessionId(newSession.id)  // DP 自动切换到新会话
+      setActiveSessionId(newSession.id)  // DP 切换到新会话
     } catch (err) {
       console.error('DP 创建会话失败:', err)
     }
   }, [])
 
-  // DP 切换会话
+  // DP 切换会话：先同步清空消息再切 ID，避免渲染时闪现旧会话内容
   const handleSelectSession = useCallback((id) => {
-    setActiveSessionId(id)  // DP useEffect 自动触发 loadMessages
-  }, [])
+    if (id === activeSessionId) return  // DP 点同一个会话不操作
+    setActiveMessages([])  // DP 先清空，确保 ChatArea 重挂载时拿到的 messages 是空数组
+    setActiveSessionId(id)  // DP 再切 ID，useEffect 自动触发 loadMessages
+  }, [activeSessionId])
 
   // DP 删除会话
   const handleDeleteSession = useCallback(
