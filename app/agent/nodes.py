@@ -64,7 +64,7 @@ def classify_intent_node(state: AgentState) -> AgentState:
     Returns:
         更新后的图状态（含意图字段）
     """
-    logger.info("🔍 进入意图识别节点...")  # 记录日志
+    logger.info("[SEARCH] 进入意图识别节点...")  # 记录日志
 
     # 获取最后一条用户消息
     user_message = state["messages"][-1].content if state["messages"] else ""
@@ -82,9 +82,9 @@ def classify_intent_node(state: AgentState) -> AgentState:
     digits = re.findall(r'\d{5,}', user_message)
     if digits:
         intent = "logistics"
-        logger.info(f"📌 预判物流（检测到数字: {digits[0]}），跳过 LLM 分类")
+        logger.info(f"[INTENT] 预判物流（检测到数字: {digits[0]}），跳过 LLM 分类")
 
-    logger.info(f"📌 最终意图: {intent}")
+    logger.info(f"[INTENT] 最终意图: {intent}")
     return {
         **state,  # 保留原有状态
         "intent": intent,  # 更新意图
@@ -103,7 +103,7 @@ def retrieve_knowledge_node(state: AgentState) -> AgentState:
     Returns:
         更新后的图状态（含检索到的知识内容）
     """
-    logger.info("📚 进入知识库检索节点...")  # 记录日志
+    logger.info("[RETRIEVE] 进入知识库检索节点...")  # 记录日志
 
     # 获取最后一条用户消息作为检索查询
     user_message = state["messages"][-1].content if state["messages"] else ""
@@ -114,7 +114,7 @@ def retrieve_knowledge_node(state: AgentState) -> AgentState:
     # 拼接检索结果为文本
     context = "\n\n---\n\n".join(retrieved_docs) if retrieved_docs else "暂无相关知识库内容。"
 
-    logger.info(f"📖 检索到 {len(retrieved_docs)} 条相关知识")  # 记录检索结果数量
+    logger.info(f"[RETRIEVE] 检索到 {len(retrieved_docs)} 条相关知识")  # 记录检索结果数量
     return {
         **state,  # 保留原有状态
         "retrieved_context": context,  # 更新检索内容
@@ -133,7 +133,7 @@ def generate_response_node(state: AgentState) -> AgentState:
     Returns:
         更新后的图状态（含 AI 回复消息）
     """
-    logger.info("💬 进入回复生成节点...")  # 记录日志
+    logger.info("[REPLY] 进入回复生成节点...")  # 记录日志
 
     llm = get_llm()  # 获取 LLM 实例
 
@@ -158,7 +158,7 @@ def generate_response_node(state: AgentState) -> AgentState:
     response = llm.invoke(prompt)  # 同步调用，生成回复
     reply_text = response.content.strip()  # 提取回复文本
 
-    logger.info(f"✅ 回复生成完成，长度: {len(reply_text)} 字符")  # 记录生成结果
+    logger.info(f"[OK] 回复生成完成，长度: {len(reply_text)} 字符")  # 记录生成结果
     return {
         **state,  # 保留原有状态
         "messages": [AIMessage(content=reply_text)],  # 将 AI 回复追加到消息列表
@@ -177,7 +177,7 @@ def human_service_node(state: AgentState) -> AgentState:
     Returns:
         更新后的图状态（标记转人工，生成过渡话术）
     """
-    logger.info("👤 进入人工客服节点...")  # 记录日志
+    logger.info("[HUMAN] 进入人工客服节点...")  # 记录日志
 
     # 转人工过渡话术
     human_message = (
@@ -204,7 +204,7 @@ def direct_response_node(state: AgentState) -> AgentState:
     Returns:
         更新后的图状态（含 AI 回复消息）
     """
-    logger.info("💬 进入直接回复节点...")  # 记录日志
+    logger.info("[REPLY] 进入直接回复节点...")  # 记录日志
 
     llm = get_llm()  # 获取 LLM 实例
 
@@ -222,7 +222,7 @@ def direct_response_node(state: AgentState) -> AgentState:
     response = llm.invoke(greeting_prompt)
     reply_text = response.content.strip()
 
-    logger.info(f"✅ 直接回复完成，长度: {len(reply_text)} 字符")
+    logger.info(f"[OK] 直接回复完成，长度: {len(reply_text)} 字符")
     return {
         **state,  # 保留原有状态
         "messages": [AIMessage(content=reply_text)],  # 追加 AI 回复

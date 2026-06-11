@@ -150,7 +150,7 @@ def save_message(
     db.refresh(message)  # 刷新消息对象获取数据库生成的默认值
 
     logger.info(
-        f"💾 消息已保存: session={session_id[:8]}..., "
+        f"[SAVE] 消息已保存: session={session_id[:8]}..., "
         f"role={body.role}, len={len(body.content)}"
     )
     return {

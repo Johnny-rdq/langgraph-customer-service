@@ -35,7 +35,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
     session_id = request.session_id or str(uuid.uuid4())
 
     logger.info(
-        f"📩 收到请求: user_id={request.user_id}, "
+        f"[REQ] 收到请求: user_id={request.user_id}, "
         f"session_id={session_id[:8]}..., message={request.message[:50]}..."
     )
 
@@ -63,7 +63,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         requires_human = result.get("requires_human", False)
 
         elapsed = time.time() - start_time
-        logger.info(f"✅ 处理完成: elapsed={elapsed:.2f}s, intent={intent}")
+        logger.info(f"[OK] 处理完成: elapsed={elapsed:.2f}s, intent={intent}")
 
         return ChatResponse(
             session_id=session_id,
@@ -72,7 +72,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             requires_human=requires_human,
         )
     except Exception as e:
-        logger.error(f"❌ 处理出错: {e}", exc_info=True)
+        logger.error(f"[ERROR] 处理出错: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"客服系统处理出错: {str(e)}")
 
 
@@ -84,7 +84,7 @@ async def chat_stream(request: ChatRequest):
     前端通过 EventSource / fetch + ReadableStream 接收
     """
     session_id = request.session_id or str(uuid.uuid4())
-    logger.info(f"📩 [流式] 收到请求: session={session_id[:8]}..., msg={request.message[:50]}...")
+    logger.info(f"[REQ] [流式] 收到请求: session={session_id[:8]}..., msg={request.message[:50]}...")
 
     # ── 生成 SSE 事件的异步生成器 ──
     async def event_generator():
@@ -101,9 +101,9 @@ async def chat_stream(request: ChatRequest):
             digits = re.findall(r'\d{5,}', request.message)
             if digits:
                 intent = "logistics"
-                logger.info(f"📌 [流式] 预判物流（检测到数字: {digits[0]}），跳过 LLM 分类")
+                logger.info(f"[INTENT] [流式] 预判物流（检测到数字: {digits[0]}），跳过 LLM 分类")
 
-            logger.info(f"📌 [流式] 最终意图: {intent}")
+            logger.info(f"[INTENT] [流式] 最终意图: {intent}")
 
             # 发送意图事件
             yield f"data: {json.dumps({'type': 'intent', 'content': intent}, ensure_ascii=False)}\n\n"
@@ -112,9 +112,9 @@ async def chat_stream(request: ChatRequest):
             context = "暂无相关背景信息。"
 
             if "logistics" in intent:
-                print("🔀 [DEBUG-ROUTE] 路由命中：物流意图，准备调用工具...")
+                logger.debug("[DEBUG-ROUTE] 路由命中：物流意图，准备调用工具...")  # 调试日志（避免 Windows GBK 编码问题）
                 context = await handle_logistics_intent(request.message, llm)
-                print("📊 [DEBUG-ROUTE] 工具执行完毕，成功拿到 context 背景资料！")
+                logger.debug("[DEBUG-ROUTE] 工具执行完毕，成功拿到 context 背景资料！")  # 调试日志
 
             elif "complaint" in intent or "inquiry" in intent:
                 retrieved = retrieve_knowledge(query=request.message, top_k=3)
@@ -169,12 +169,12 @@ async def chat_stream(request: ChatRequest):
             # ── 发送完成事件 ──
             elapsed = time.time() - start_time
 
-            logger.info(f"✅ [流式] 完成: elapsed={elapsed:.2f}s, len={len(full_reply)}")
+            logger.info(f"[OK] [流式] 完成: elapsed={elapsed:.2f}s, len={len(full_reply)}")
 
             yield f"data: {json.dumps({'type': 'done', 'session_id': session_id, 'intent': intent, 'requires_human': intent == 'human'}, ensure_ascii=False)}\n\n"
 
         except Exception as e:
-            logger.error(f"❌ [流式] 出错: {e}", exc_info=True)
+            logger.error(f"[ERROR] [流式] 出错: {e}", exc_info=True)
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(

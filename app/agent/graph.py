@@ -41,7 +41,7 @@ def build_graph() -> StateGraph:
     Returns:
         编译好的 StateGraph 实例，可用于 invoke/ainvoke
     """
-    logger.info("🏗️  开始构建 LangGraph 客服工作流...")  # 记录日志
+    logger.info("[BUILD]️  开始构建 LangGraph 客服工作流...")  # 记录日志
 
     # ── 创建状态图 ──
     workflow = StateGraph(AgentState)  # 指定图的状态类型
@@ -107,5 +107,5 @@ def build_graph() -> StateGraph:
 
     compiled_graph = workflow.compile(checkpointer=memory)
 
-    logger.info("✅ LangGraph 客服工作流构建完成!")
+    logger.info("[OK] LangGraph 客服工作流构建完成!")
     return compiled_graph

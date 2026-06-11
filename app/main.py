@@ -3,6 +3,15 @@ FastAPI 应用启动入口
 PyCharm 中直接运行此文件即可启动后端 + 前端 + 自动打开浏览器
 """
 import sys                                       # 系统模块
+
+# ── Windows 下强制 stdout 使用 UTF-8 编码，解决 GBK 无法编码 emoji 等 Unicode 字符的问题 ──
+# 必须在所有输出之前执行，否则 print() 含 emoji 会抛出 UnicodeEncodeError
+if sys.stdout.encoding.upper() != "UTF-8":       # 仅在非 UTF-8 时才重配置（如 Windows GBK）
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # 重设编码 + 无法编码的字符用 ? 替换
+    except Exception:                            # 部分环境（如管道重定向）不支持 reconfigure
+        pass                                     # 静默忽略，后续用 logger 替代 print 来兜底
+
 import subprocess                                # 子进程管理，用于启动前端服务
 # import webbrowser                                # 自动打开浏览器
 import threading                                 # 多线程，后台读取前端日志
@@ -51,15 +60,15 @@ def _start_frontend():
 
     # 检查目录是否存在
     if not frontend_dir.exists():
-        logger.warning("⚠️  前端目录不存在，跳过启动前端: %s", frontend_dir)
+        logger.warning("[WARN]  前端目录不存在，跳过启动前端: %s", frontend_dir)
         return
 
     # 检查 node_modules 是否已安装
     if not (frontend_dir / "node_modules").exists():
-        logger.warning("⚠️  前端依赖未安装，请先执行: cd frontend && npm install")
+        logger.warning("[WARN]  前端依赖未安装，请先执行: cd frontend && npm install")
         return
 
-    logger.info("🎨 正在启动前端开发服务器...")
+    logger.info("[FRONTEND] 正在启动前端开发服务器...")
 
     # 启动 npm run dev（shell=True 确保找到 npm 命令）
     _frontend_process = subprocess.Popen(
@@ -89,7 +98,7 @@ def _start_frontend():
 
         # 进程结束后的处理
         if _frontend_process and _frontend_process.poll() is not None:
-            logger.info("🎨 前端开发服务器已停止")
+            logger.info("[FRONTEND] 前端开发服务器已停止")
 
     monitor_thread = threading.Thread(target=_monitor, daemon=True)
     monitor_thread.start()
@@ -105,22 +114,22 @@ def _start_frontend():
             continue
 
     # ── 自动打开浏览器 ──
-    logger.info("🌐 正在打开浏览器...")
+    logger.info("[NET] 正在打开浏览器...")
     # webbrowser.open("http://localhost:3000")
-    logger.info("✅ 前端已就绪: http://localhost:3000")
+    logger.info("[OK] 前端已就绪: http://localhost:3000")
 
 
 def _stop_frontend():
     """停止前端开发服务器"""
     global _frontend_process
     if _frontend_process and _frontend_process.poll() is None:
-        logger.info("🎨 正在关闭前端开发服务器...")
+        logger.info("[FRONTEND] 正在关闭前端开发服务器...")
         _frontend_process.terminate()                # 发送终止信号
         try:
             _frontend_process.wait(timeout=5)        # 等 5 秒退出
         except subprocess.TimeoutExpired:
             _frontend_process.kill()                 # 强制杀进程
-        logger.info("🎨 前端开发服务器已关闭")
+        logger.info("[FRONTEND] 前端开发服务器已关闭")
 
 
 # ── FastAPI 生命周期 ──
@@ -129,18 +138,18 @@ async def lifespan(app: FastAPI):
     """应用生命周期：启动时拉起前端，关闭时停掉前端"""
     create_db_and_tables()
     settings = get_settings()
-    logger.info(f"🚀 {settings.APP_NAME} 正在启动...")
-    logger.info(f"📡 模型: {settings.LLM_MODEL}")
+    logger.info(f"[START] {settings.APP_NAME} 正在启动...")
+    logger.info(f"[MODEL] 模型: {settings.LLM_MODEL}")
 
     # ── 启动前端服务（在独立线程中，不阻塞 API 启动）──
     frontend_thread = threading.Thread(target=_start_frontend, daemon=True)
     frontend_thread.start()
 
-    logger.info(f"🌐 后端 API: http://{settings.APP_HOST}:{settings.APP_PORT}/docs")
+    logger.info(f"[NET] 后端 API: http://{settings.APP_HOST}:{settings.APP_PORT}/docs")
     yield                                              # 应用运行中
     # ── 关闭清理 ──
     _stop_frontend()
-    logger.info("👋 服务已关闭")
+    logger.info("[HELLO] 服务已关闭")
 
 
 # ── 创建 FastAPI 应用 ──

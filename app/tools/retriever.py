@@ -56,13 +56,13 @@ def _get_vector_store() -> Chroma:
             old_hash = f.read().strip()
     if old_hash != current_hash:
         needs_rebuild = True
-        logger.info("📝 检测到知识库已更新，将重建向量索引...")
+        logger.info("[NOTE] 检测到知识库已更新，将重建向量索引...")
         # 删除旧向量库（文件被占用时跳过，不影响新连接）
         if os.path.exists(db_file):
             try:
                 os.remove(db_file)
             except OSError:
-                logger.warning("⚠️ 无法删除旧向量库文件（可能被占用），将清空集合重建")
+                logger.warning("[WARN] 无法删除旧向量库文件（可能被占用），将清空集合重建")
                 # 先创建一个临时连接来清空旧数据
                 temp_store = Chroma(
                     collection_name="customer_service_kb",
@@ -74,9 +74,9 @@ def _get_vector_store() -> Chroma:
                     existing = temp_store.get()
                     if existing and existing.get("ids"):
                         temp_store.delete(ids=existing["ids"])
-                        logger.info("✅ 已清空旧向量数据")
+                        logger.info("[OK] 已清空旧向量数据")
                 except Exception as e:
-                    logger.warning(f"⚠️ 清空旧数据失败: {e}")
+                    logger.warning(f"[WARN] 清空旧数据失败: {e}")
 
     # 连接 ChromaDB
     _vector_store = Chroma(
@@ -95,9 +95,9 @@ def _get_vector_store() -> Chroma:
 
         if docs:
             _vector_store.add_documents(docs)
-            logger.info(f"✅ 成功向量化 {len(docs)} 条知识并存入 ChromaDB")
+            logger.info(f"[OK] 成功向量化 {len(docs)} 条知识并存入 ChromaDB")
         else:
-            logger.warning("⚠️ 知识库文件为空")
+            logger.warning("[WARN] 知识库文件为空")
 
         # 保存新哈希
         os.makedirs(chroma_dir, exist_ok=True)
@@ -105,7 +105,7 @@ def _get_vector_store() -> Chroma:
             f.write(current_hash)
 
     elif not os.path.exists(kb_path):
-        logger.warning(f"⚠️ 找不到知识库文件: {kb_path}")
+        logger.warning(f"[WARN] 找不到知识库文件: {kb_path}")
 
     return _vector_store
 
@@ -117,13 +117,13 @@ def retrieve_knowledge(query: str, top_k: int = 3) -> List[str]:
         results = vector_store.similarity_search(query, k=top_k)
 
         if not results:
-            logger.info(f"🔍 语义检索无结果: query='{query[:30]}...'")
+            logger.info(f"[SEARCH] 语义检索无结果: query='{query[:30]}...'")
             return []
 
         docs = [doc.page_content for doc in results]
-        logger.info(f"🔍 检索命中 {len(docs)} 条: query='{query[:30]}...'")
+        logger.info(f"[SEARCH] 检索命中 {len(docs)} 条: query='{query[:30]}...'")
         return docs
 
     except Exception as e:
-        logger.error(f"❌ 向量检索异常: {e}", exc_info=True)
+        logger.error(f"[ERROR] 向量检索异常: {e}", exc_info=True)
         return []
