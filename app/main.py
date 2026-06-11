@@ -58,5 +58,12 @@ if __name__ == "__main__":
     import uvicorn
     settings = get_settings()
     # 强制将端口锁死为 8888，无视配置文件
+    frontend_url = "http://localhost:3000"  # 前端页面地址
+    backend_url = "http://localhost:8888"  # 后端 API 地址
+    print("=" * 50)  # 分隔线
+    print("  🤖 LangGraph 智能客服系统")  # 标题
+    print("=" * 50)  # 分隔线
+    print(f"  🌐 前端页面: {frontend_url}")  # 前端链接（PyCharm 可点击跳转）
+    print(f"  📡 API 文档: {backend_url}/docs")  # Swagger 文档链接
+    print("=" * 50)  # 分隔线
     uvicorn.run("app.main:app", host="0.0.0.0", port=8888, reload=False)
-    print("服务已启动，请访问 http://localhost:3000/")
