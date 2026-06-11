@@ -107,17 +107,36 @@ async def handle_logistics_intent(user_message: str, llm: BaseChatModel) -> str:
 
     try:
         # ════════════════════════════════════════════════════
-        # 策略一：正则提取数字（快速路径，零 LLM 消耗）
+        # 策略一：正则提取数字（零 LLM 消耗）
         # ════════════════════════════════════════════════════
         print("🔍 [DEBUG-2] 正则提取数字...")
         digits = re.findall(r'\d+', user_message)  # 匹配所有连续数字
 
         if digits:
-            order_id = digits[0]  # 取第一个数字串
-            # 过滤：订单号通常在 5-12 位之间
-            if 5 <= len(order_id) <= 12:
-                print(f"🎯 [DEBUG-3] 正则命中！订单号: '{order_id}'，跳过 LLM")
-                return query_mock_db(order_id)  # 直接查库
+            # 逐个尝试每个数字串，优先匹配数据库中的键
+            for d in digits:
+                # 直接匹配（如 "112233"）
+                if d in MOCK_LOGISTICS_DB:
+                    print(f"🎯 [DEBUG-3] 正则直接命中订单号: '{d}'")
+                    return query_mock_db(d)
+                # 数字串太长（运单号如 ZT1122334455 → 提取 1122334455）
+                if len(d) >= 10:
+                    # 先试前 6 位（运单号格式: 快递缩写+6位订单号+后缀）
+                    short = d[:6]
+                    if short in MOCK_LOGISTICS_DB:
+                        print(f"🎯 [DEBUG-3] 从运单号前 6 位提取订单号: '{short}' ← '{d}'")
+                        return query_mock_db(short)
+                    # 再试后 6 位
+                    short = d[-6:]
+                    if short in MOCK_LOGISTICS_DB:
+                        print(f"🎯 [DEBUG-3] 从运单号后 6 位提取订单号: '{short}' ← '{d}'")
+                        return query_mock_db(short)
+
+            # 都没直接命中，取第一个 5-12 位的数字串兜底
+            for d in digits:
+                if 5 <= len(d) <= 12:
+                    print(f"🎯 [DEBUG-3] 正则兜底: '{d}'")
+                    return query_mock_db(d)
 
         # ════════════════════════════════════════════════════
         # 策略二：LLM 语义识别（兜底路径）
@@ -138,9 +157,14 @@ async def handle_logistics_intent(user_message: str, llm: BaseChatModel) -> str:
             print("⚠️ [DEBUG-6] LLM 判定无订单号")
             return query_mock_db("")
 
-        clean_digits = re.findall(r'\d+', ans)  # 清洗 LLM 回复中的数字
-        order_id = clean_digits[0] if clean_digits else ""  # 取第一个
-        print(f"🎯 [DEBUG-7] 从 LLM 回复清洗出订单号: '{order_id}'")
+        # LLM 返回的数字也逐个尝试命中数据库
+        clean_digits = re.findall(r'\d+', ans)
+        for d in clean_digits:
+            if d in MOCK_LOGISTICS_DB:
+                print(f"🎯 [DEBUG-7] LLM 提取命中: '{d}'")
+                return query_mock_db(d)
+        order_id = clean_digits[0] if clean_digits else ""
+        print(f"🎯 [DEBUG-7] LLM 兜底: '{order_id}'")
         return query_mock_db(order_id)  # 查库
 
     except Exception as e:
