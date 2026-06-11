@@ -45,14 +45,14 @@ export default function WelcomeScreen({ onSend, onNewChat, hasSession }) {
             <button
               key={idx}
               onClick={async () => {
-                // DP 如果已有会话，直接发送；否则先创建会话，等创建完成后用 ref 再发
+                // 如果已有会话，直接发送；否则先创建会话，等创建完成后用 ref 再发
                 if (hasSession) {
-                  onSend(item.text)  // DP 有活跃会话，直接发送
+                  onSend(item.text)  // 有活跃会话，直接发送
                 } else if (onNewChat) {
-                  await onNewChat()  // DP 等新会话创建完毕
-                  // DP ChatArea 已用新 key 重新挂载，当前组件即将卸载
-                  // DP 无法用旧的 onSend，消息会在下次渲染时丢失
-                  // DP 折中：创建会话后用户手动输入第一句话
+                  await onNewChat()  // 等新会话创建完毕
+                  // ChatArea 已用新 key 重新挂载，当前组件即将卸载
+                  // 无法用旧的 onSend，消息会在下次渲染时丢失
+                  // 折中：创建会话后用户手动输入第一句话
                 }
               }}
               className="flex items-start gap-3 p-4 rounded-xl border border-surface-700/50
