@@ -151,7 +151,9 @@ export default function App() {
         onDeleteSession={handleDeleteSession}
       />
 
+      {/* DP key 保证切换会话时 ChatArea 完全重新挂载，避免 useChat 闭包残留上一会话的消息 */}
       <ChatArea
+        key={activeSessionId || 'new'}
         session={activeSession}
         messages={activeMessages}
         onMessagesChange={handleMessagesChange}
