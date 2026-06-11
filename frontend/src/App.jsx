@@ -35,13 +35,14 @@ export default function App() {
     }
   }
 
-  // DP 切换会话时，从后端加载对应消息
+  // DP 切换会话时：先同步清空旧消息，再异步加载新消息
   useEffect(() => {
     if (!activeSessionId) {
-      setActiveMessages([])  // DP 没有选中会话则清空消息
+      setActiveMessages([])  // DP 没有选中会话则清空
       return
     }
-    loadMessages(activeSessionId)  // DP 加载选中会话的消息
+    setActiveMessages([])  // DP 立刻清空，避免 ChatArea 挂载时传入上一会话的旧消息
+    loadMessages(activeSessionId)  // DP 异步加载新会话的消息
   }, [activeSessionId])
 
   const loadMessages = async (sessionId) => {
