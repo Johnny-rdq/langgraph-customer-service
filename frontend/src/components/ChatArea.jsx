@@ -29,7 +29,7 @@ export default function ChatArea({ session, messages, onMessagesChange, onNewCha
       <div className="flex-1 overflow-y-auto">
         {!session || hookMessages.length === 0 ? (
           /* DP 没有会话或消息为空时显示欢迎页 */
-          <WelcomeScreen onSend={sendMessage} onNewChat={onNewChat} />
+          <WelcomeScreen onSend={sendMessage} onNewChat={onNewChat} hasSession={!!session} />
         ) : (
           <div className="max-w-4xl mx-auto">
             {/* DP 已完成的消息列表 */}
