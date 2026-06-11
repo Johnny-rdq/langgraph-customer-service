@@ -77,12 +77,12 @@ def classify_intent_node(state: AgentState) -> AgentState:
     response = llm.invoke(prompt)  # 同步调用 LLM
     intent = response.content.strip().lower()  # 提取并清洗意图字符串
 
-    # 预判：消息含 5-12 位数字大概率是物流单号，直接修正为 logistics
+    # 预判：消息含 ≥5 位连续数字直接当物流
     import re
-    digits = re.findall(r'\d{5,12}', user_message)
-    if digits and intent not in ("human", "complaint"):
+    digits = re.findall(r'\d{5,}', user_message)
+    if digits:
         intent = "logistics"
-        logger.info(f"📌 预判物流意图（检测到数字: {digits[0]}），跳过 LLM 分类结果")
+        logger.info(f"📌 预判物流（检测到数字: {digits[0]}），跳过 LLM 分类")
 
     logger.info(f"📌 最终意图: {intent}")
     return {

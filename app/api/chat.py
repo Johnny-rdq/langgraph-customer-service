@@ -97,11 +97,11 @@ async def chat_stream(request: ChatRequest):
             intent_response = await llm.ainvoke(intent_prompt)
             intent = intent_response.content.strip().lower() if intent_response.content else "general"
 
-            # 预判：消息含 5-12 位数字大概率是物流单号，强制修正意图避免 LLM 分错
-            digits = re.findall(r'\d{5,12}', request.message)
-            if digits and intent not in ("human", "complaint"):
+            # 预判：消息含 ≥5 位连续数字直接当物流，不管 LLM 分出什么意图
+            digits = re.findall(r'\d{5,}', request.message)
+            if digits:
                 intent = "logistics"
-                logger.info(f"📌 [流式] 预判物流意图（检测到数字: {digits[0]}），跳过 LLM 分类")
+                logger.info(f"📌 [流式] 预判物流（检测到数字: {digits[0]}），跳过 LLM 分类")
 
             logger.info(f"📌 [流式] 最终意图: {intent}")
 

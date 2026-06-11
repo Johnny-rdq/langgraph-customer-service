@@ -30,11 +30,11 @@ def route_after_intent(state: AgentState) -> str:
     logger.info(f"🔀 路由决策: intent={intent}")  # 记录路由决策
 
     if intent == "human":
-        return "human_service"  # 用户要求转人工，直接进入人工节点
-    elif intent in ("complaint", "inquiry"):
-        return "retrieve_knowledge"  # 投诉或咨询，先检索知识库
+        return "human_service"  # 用户要求转人工
+    elif intent in ("complaint", "inquiry", "logistics"):
+        return "retrieve_knowledge"  # 投诉/咨询/物流，先查知识库
     else:
-        return "direct_response"  # 一般闲聊或未知意图，直接回复
+        return "direct_response"  # 闲聊或未知意图，直接回复
 
 
 def route_after_retrieval(state: AgentState) -> str:
