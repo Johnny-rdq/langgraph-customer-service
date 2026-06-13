@@ -88,8 +88,8 @@ async def chat_stream(request: ChatRequest):
             with Session(engine) as db:
                 chat_session = db.get(ChatSession, session_id)
                 if chat_session and chat_session.is_human_mode:
-                    # DP 会话已处于人工模式，用户消息已由 session.py 持久化，此处不重复保存。
-                    # DP 通过 WebSocket 实时推送用户消息给管理员面板（减少 2 秒轮询延迟）。
+                    # 会话已处于人工模式，用户消息已由 session.py 持久化，此处不重复保存。
+                    # 通过 WebSocket 实时推送用户消息给管理员面板（减少 2 秒轮询延迟）。
                     yield f"data: {json.dumps({'type': 'done', 'session_id': session_id, 'intent': 'human', 'requires_human': True}, ensure_ascii=True)}\n\n"
                     try:
                         from app.api.ws import manager
@@ -118,7 +118,7 @@ async def chat_stream(request: ChatRequest):
             yield f"data: {json.dumps({'type': 'intent', 'content': intent}, ensure_ascii=True)}\n\n"
 
             # ─────────────────────────────────────────────────
-            # DP 核心修复：用户转人工时立即写入数据库 + 通知管理员面板。
+            # 核心修复：用户转人工时立即写入数据库 + 通知管理员面板。
             # 问题背景：之前识别到 human 意图后只返回 requires_human=True，从未写 is_human_mode，
             # 导致管理员轮询 /ws/admin/sessions 永远看不到该会话。
             # 修复要点：①写入 is_human_mode ②创建 ChatSession（如不存在）

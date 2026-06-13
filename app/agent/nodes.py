@@ -151,19 +151,19 @@ def generate_response_node(state: AgentState) -> AgentState:
 
 def human_service_node(state: AgentState, config: dict = None) -> AgentState:
     """
-    DP 转人工客服节点 —— 将当前会话标记为人工模式，写入数据库排队队列。
-    DP 设计思路：前端主要走 chat_stream (SSE) 路径，但图路径（main.py 的 /messages 接口）
-    DP 也会触发此节点。因此本节点作为兜底方案，确保无论走哪条路径，is_human_mode 都能被写入。
-    DP session_id 获取策略（优先级从高到低）：
-    DP   1. ContextVar（main.py 中间件已从 URL 中提取并存入保险箱）
-    DP   2. config["configurable"]["thread_id"]（LangGraph 配置传递）
-    DP   3. state["session_id"]（状态中的会话 ID）
-    DP   4. 数据库最新会话兜底（暴力兜底，避免找不到 ID）
-    DP 副作用：
-    DP   1. 向 ChatSession 表写入 is_human_mode = True（管理员面板据此拉取排队列表）
-    DP   2. 会话记录不存在时自动创建
-    DP   3. 保存用户最后一条消息到 ChatMessage 表
-    DP   4. 通过 WebSocket 实时通知管理员面板（减少轮询延迟）
+    转人工客服节点 —— 将当前会话标记为人工模式，写入数据库排队队列。
+    设计思路：前端主要走 chat_stream (SSE) 路径，但图路径（main.py 的 /messages 接口）
+    也会触发此节点。因此本节点作为兜底方案，确保无论走哪条路径，is_human_mode 都能被写入。
+    session_id 获取策略（优先级从高到低）：
+      1. ContextVar（main.py 中间件已从 URL 中提取并存入保险箱）
+      2. config["configurable"]["thread_id"]（LangGraph 配置传递）
+      3. state["session_id"]（状态中的会话 ID）
+      4. 数据库最新会话兜底（暴力兜底，避免找不到 ID）
+    副作用：
+      1. 向 ChatSession 表写入 is_human_mode = True（管理员面板据此拉取排队列表）
+      2. 会话记录不存在时自动创建
+      3. 保存用户最后一条消息到 ChatMessage 表
+      4. 通过 WebSocket 实时通知管理员面板（减少轮询延迟）
     """
     import logging
     from app.core.db import engine
@@ -237,7 +237,7 @@ def human_service_node(state: AgentState, config: dict = None) -> AgentState:
                         content=user_message_text
                     )
                     db.add(user_msg)
-                    # DP 同时保存 AI 转接确认消息，确保轮询加载时用户能看到转接提示
+                    # 同时保存 AI 转接确认消息，确保轮询加载时用户能看到转接提示
                     transfer_msg = ChatMessage(
                         session_id=chat.id, role="assistant",
                         content="【系统提示】已为您成功转接，人工客服马上就来！"

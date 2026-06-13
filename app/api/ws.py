@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/v1/ws", tags=["websocket"])
 
 class ConnectionManager:
     """
-    DP WebSocket 连接管理器 —— 管理两类连接：
+    WebSocket 连接管理器 —— 管理两类连接：
       1. 用户连接：以 session_id 为 key，用于向用户推送客服回复
       2. 管理员连接：以 __admin_broadcast__ 为 key，用于向管理员面板实时推送新排队会话通知
     管理员面板原本只靠 3 秒轮询拉取排队列表，用户转人工后最坏要等 3 秒。
@@ -109,7 +109,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 @router.websocket("/admin/listen")
 async def admin_websocket_endpoint(websocket: WebSocket):
     """
-    DP 管理员打开 /admin 时自动连接此端点，后端在用户转人工时通过
+    管理员打开 /admin 时自动连接此端点，后端在用户转人工时通过
     broadcast_to_admin 推送新会话通知，管理员面板收到后立即刷新排队列表。
     """
     await manager.connect_admin(websocket)
@@ -216,9 +216,9 @@ async def im_webhook_receiver(request: Request):
 @router.get("/admin/sessions", summary="获取所有等待人工接管的会话")
 async def get_human_sessions():
     """
-    DP 供客服前端页面调用，拉取排队列表。
-    DP 按创建时间倒序排列（最新转人工的排最上面），
-    DP 同时返回会话标题（与用户聊天侧边栏标题同步），便于客服识别。
+    供客服前端页面调用，拉取排队列表。
+    按创建时间倒序排列（最新转人工的排最上面），
+    同时返回会话标题（与用户聊天侧边栏标题同步），便于客服识别。
     """
     try:
         from app.core.db import engine

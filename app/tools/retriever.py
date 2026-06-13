@@ -1,6 +1,6 @@
-"""DP 知识库检索工具模块
-DP 基于 ChromaDB + 阿里云 Embedding 模型做语义检索。
-DP 自动检测 knowledge_base.txt 修改时间，变化时重建向量库。
+"""知识库检索工具模块
+基于 ChromaDB + 阿里云 Embedding 模型做语义检索。
+自动检测 knowledge_base.txt 修改时间，变化时重建向量库。
 """
 import os
 import logging
@@ -28,7 +28,7 @@ def _get_kb_hash(kb_path: str) -> str:
 
 
 def _get_vector_store() -> Chroma:
-    """DP 获取或创建 ChromaDB 向量存储（自动检测知识库更新并重建）"""
+    """获取或创建 ChromaDB 向量存储（自动检测知识库更新并重建）"""
     global _vector_store
     if _vector_store is not None:
         return _vector_store
@@ -111,7 +111,7 @@ def _get_vector_store() -> Chroma:
 
 
 def retrieve_knowledge(query: str, top_k: int = 3) -> List[str]:
-    """DP 语义检索知识库，返回最相关的 top_k 条知识段落"""
+    """语义检索知识库，返回最相关的 top_k 条知识段落"""
     try:
         vector_store = _get_vector_store()
         results = vector_store.similarity_search(query, k=top_k)

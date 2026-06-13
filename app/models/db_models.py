@@ -1,6 +1,6 @@
-"""DP 数据库表模型模块
-DP 定义 ChatSession（会话）和 ChatMessage（消息）两个 ORM 表。
-DP ChatSession 通过 Relationship 关联 ChatMessage，删会话时级联删消息。
+"""数据库表模型模块
+定义 ChatSession（会话）和 ChatMessage（消息）两个 ORM 表。
+ChatSession 通过 Relationship 关联 ChatMessage，删会话时级联删消息。
 """
 from sqlmodel import SQLModel, Field, Relationship  # SQLModel ORM 基类、字段和关联
 from datetime import datetime  # 时间戳
@@ -9,7 +9,7 @@ import uuid  # 唯一 ID 生成
 
 
 class ChatMessage(SQLModel, table=True):
-    """DP 聊天消息数据表 —— 每条用户/AI 消息有一条记录"""
+    """聊天消息数据表 —— 每条用户/AI 消息有一条记录"""
     __tablename__ = "chat_messages"  # 数据库表名
 
     id: str = Field(
@@ -26,7 +26,7 @@ class ChatMessage(SQLModel, table=True):
 
 
 class ChatSession(SQLModel, table=True):
-    """DP 侧边栏会话列表的数据表"""
+    """侧边栏会话列表的数据表"""
     id: str = Field(primary_key=True)  # 会话 ID，同 LangGraph 的 session_id
     title: str = Field(default="新对话")  # 会话标题，由第一条用户消息自动更新
     created_at: datetime = Field(default_factory=datetime.utcnow)  # 会话创建时间

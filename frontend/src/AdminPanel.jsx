@@ -38,7 +38,7 @@ export default function AdminPanel() {
     }
   };
 
-  // WebSocket 实时监听：new_human_session / user_message
+  // WebSocket 实时监听：new_human_session / user_message / session_exited
   useEffect(() => {
     let ws = null;
     let reconnectTimer = null;
@@ -58,6 +58,7 @@ export default function AdminPanel() {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+
           if (data.type === 'new_human_session') {
             console.log('📢 新排队会话:', data.session_id);
             fetchSessions();  // 刷新排队列表
@@ -65,13 +66,26 @@ export default function AdminPanel() {
             if (!activeSessionRef.current) {
               setActiveSession(data.session_id);
             }
+
           } else if (data.type === 'user_message') {
             console.log('💬 用户新消息, 会话:', data.session_id);
             // 属于当前查看的会话则立即刷新
             if (activeSessionRef.current === data.session_id) {
               fetchChatHistory(data.session_id);
             }
+
+          } else if (data.type === 'session_exited') {
+            console.log('🔴 用户已退出人工:', data.session_id);
+            // 立即将该会话从左侧列表中移除
+            setSessions(prev => prev.filter(s => s.session_id !== data.session_id));
+
+            // 当用户退出人工时，直接静默恢复未选中状态并清空聊天
+            if (activeSessionRef.current === data.session_id) {
+              setActiveSession(null);
+              setChatHistory([]);
+            }
           }
+
         } catch (err) {
           console.error('WebSocket 消息解析失败:', err);
         }
@@ -81,7 +95,6 @@ export default function AdminPanel() {
         setWsConnected(false);
         console.log('🔌 管理员 WebSocket 断开，3 秒后重连...');
         if (pingInterval) clearInterval(pingInterval);
-        // 断开后 3 秒自动重连
         reconnectTimer = setTimeout(connectWs, 3000);
       };
 
@@ -93,7 +106,6 @@ export default function AdminPanel() {
 
     connectWs();
 
-    // 清理函数
     return () => {
       if (pingInterval) clearInterval(pingInterval);
       if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -101,17 +113,17 @@ export default function AdminPanel() {
     };
   }, []);
 
-  // 1. 每 3 秒自动刷新左侧排队列表（轮询兜底 + WebSocket 实时推送双保险）
+  // 1. 每 3 秒自动刷新左侧排队列表
   useEffect(() => {
     fetchSessions();
     const interval = setInterval(fetchSessions, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  // 2. 每 2 秒自动刷新右侧选中会话的聊天记录（轮询兜底 + WebSocket 实时刷新双保险）
+  // 2. 每 2 秒自动刷新右侧选中会话的聊天记录
   useEffect(() => {
     if (!activeSession) return;
-    fetchChatHistory(activeSession);  // 切换会话时立即加载
+    fetchChatHistory(activeSession);
     const interval = setInterval(() => fetchChatHistory(activeSession), 2000);
     return () => clearInterval(interval);
   }, [activeSession]);
@@ -187,40 +199,47 @@ export default function AdminPanel() {
               正在接管会话: {activeSession}
             </h3>
 
-            {/* 聊天记录显示区域 */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '10px', backgroundColor: '#252526', borderRadius: '8px', marginBottom: '20px' }}>
               {chatHistory.length === 0 ? (
                 <p style={{ color: '#888', textAlign: 'center', marginTop: '20px' }}>暂无聊天记录加载中...</p>
               ) : (
-                chatHistory.map((msg, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      margin: '10px 0',
-                      textAlign: msg.role === 'user' ? 'left' : 'right'
-                    }}
-                  >
-                    <span style={{
-                      display: 'inline-block',
-                      padding: '10px 15px',
-                      borderRadius: '8px',
-                      backgroundColor: msg.role === 'user' ? '#3e3e3e' : '#007bff',
-                      color: 'white',
-                      maxWidth: '70%',
-                      wordBreak: 'break-all'
-                    }}>
-                      <strong style={{ display: 'block', fontSize: '12px', color: '#aaa', marginBottom: '4px' }}>
-                        {msg.role === 'user' ? '用户' : '客服/AI'}
-                      </strong>
-                      {msg.content}
-                    </span>
-                  </div>
-                ))
+                // 🌟🌟🌟 核心过滤逻辑：把特定的系统提示语屏蔽掉 🌟🌟🌟
+                chatHistory
+                  .filter(msg => {
+                    const text = msg.content || '';
+                    return !text.includes('【系统提示】已为您成功转接') &&
+                           !text.includes('✅ **已退出人工客服**') &&
+                           !text.includes('⏱️ **对话超时**');
+                  })
+                  .map((msg, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        margin: '10px 0',
+                        textAlign: msg.role === 'user' ? 'left' : 'right'
+                      }}
+                    >
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '10px 15px',
+                        borderRadius: '8px',
+                        backgroundColor: msg.role === 'user' ? '#3e3e3e' : '#007bff',
+                        color: 'white',
+                        maxWidth: '70%',
+                        wordBreak: 'break-all',
+                        whiteSpace: 'pre-wrap'
+                      }}>
+                        <strong style={{ display: 'block', fontSize: '12px', color: '#aaa', marginBottom: '4px' }}>
+                          {msg.role === 'user' ? '用户' : '客服/AI'}
+                        </strong>
+                        {msg.content}
+                      </span>
+                    </div>
+                  ))
               )}
               <div ref={chatBottomRef} />
             </div>
 
-            {/* 输入框 */}
             <div style={{ display: 'flex', gap: '10px' }}>
               <input
                 value={message}
@@ -255,7 +274,7 @@ export default function AdminPanel() {
             </div>
           </>
         ) : (
-          <h3 style={{ color: '#888', marginTop: '50px' }}>👈 请在左侧选择一个排队的用户</h3>
+          <h3 style={{ color: '#888', marginTop: '50px' }}>👈 选中的用户已离开或列表暂空</h3>
         )}
       </div>
     </div>

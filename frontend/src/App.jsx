@@ -1,22 +1,18 @@
-import { useState, useCallback, useEffect, useRef } from 'react'  // React Hooks
-import Sidebar from './components/Sidebar.jsx'   // 侧边栏组件
-import ChatArea from './components/ChatArea.jsx'  // 主聊天区域组件
+import { useState, useCallback, useEffect } from 'react'
+import Sidebar from './components/Sidebar.jsx'
+import ChatArea from './components/ChatArea.jsx'
 
-// 后端 API 基础地址
 const API_BASE = '/api/v1/sessions'
 
 export default function App() {
-  // 状态管理
-  const [sessions, setSessions] = useState([])  // 会话列表（从后端加载）
-  const [activeSessionId, setActiveSessionId] = useState(null)  // 当前活跃会话 ID
-  const [activeMessages, setActiveMessages] = useState([])  // 当前活跃会话的消息列表
-  const [messagesLoading, setMessagesLoading] = useState(false)  // 消息加载中
-  const [loading, setLoading] = useState(true)  // 首次加载状态
-  const msgCountRef = useRef(0)  // 消息计数守卫：防止空数据覆盖导致闪屏
+  const [sessions, setSessions] = useState([])
+  const [activeSessionId, setActiveSessionId] = useState(null)
+  const [activeMessages, setActiveMessages] = useState([])
+  const [messagesLoading, setMessagesLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
 
-  // 页面初始化：从后端加载会话列表
   useEffect(() => {
-    loadSessions()  // 只执行一次
+    loadSessions()
   }, [])
 
   const loadSessions = async () => {
@@ -25,9 +21,20 @@ export default function App() {
       const res = await fetch(API_BASE)
       if (!res.ok) throw new Error('加载会话失败')
       const data = await res.json()
-      setSessions(data)
-      if (data.length > 0 && !activeSessionId) {
-        setActiveSessionId(data[0].id)
+
+      // 🌟 核心修复 1：如果一个会话都没有，直接在初始化时自动请求后端生成一个
+      if (data.length === 0) {
+        const createRes = await fetch(API_BASE, { method: 'POST' })
+        if (createRes.ok) {
+          const newSession = await createRes.json()
+          setSessions([newSession])
+          setActiveSessionId(newSession.id)
+        }
+      } else {
+        setSessions(data)
+        if (!activeSessionId) {
+          setActiveSessionId(data[0].id)
+        }
       }
     } catch (err) {
       console.error('加载会话列表失败:', err)
@@ -36,38 +43,13 @@ export default function App() {
     }
   }
 
-  // 每 2 秒轮询最新消息，msgCountRef 防闪屏守卫
-  useEffect(() => {
-    if (!activeSessionId) return; // 如果没有选中的会话，就不刷新
-
-    const fetchLatestMessages = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/${activeSessionId}/messages`);
-        if (res.ok) {
-          const data = await res.json();
-          // 消息数比当前少则跳过（DB 未同步完）
-          if (data.length < msgCountRef.current) return;
-          msgCountRef.current = data.length;  // 更新计数
-          setActiveMessages(data); // 实时更新消息列表
-        }
-      } catch (error) {
-        console.error("后台刷新消息失败:", error);
-      }
-    };
-
-    const interval = setInterval(fetchLatestMessages, 2000);
-    return () => clearInterval(interval); // 切换会话或卸载组件时清理定时器
-  }, [activeSessionId]);
-
-  // 切换会话时：清空旧消息 → 显示加载 → 异步加载新消息
+  // 切换会话
   useEffect(() => {
     if (!activeSessionId) {
       setActiveMessages([])
-      msgCountRef.current = 0
       return
     }
     setActiveMessages([])
-    msgCountRef.current = 0
     setMessagesLoading(true)
     loadMessages(activeSessionId)
   }, [activeSessionId])
@@ -77,18 +59,15 @@ export default function App() {
       const res = await fetch(`${API_BASE}/${sessionId}/messages`)
       if (!res.ok) throw new Error('加载消息失败')
       const data = await res.json()
-      msgCountRef.current = data.length
       setActiveMessages(data)
     } catch (err) {
       console.error('加载消息失败:', err)
-      msgCountRef.current = 0
       setActiveMessages([])
     } finally {
       setMessagesLoading(false)
     }
   }
 
-  // 创建新会话
   const handleNewChat = useCallback(async () => {
     try {
       const res = await fetch(API_BASE, { method: 'POST' })
@@ -102,14 +81,12 @@ export default function App() {
     }
   }, [])
 
-  // 切换会话
   const handleSelectSession = useCallback((id) => {
     if (id === activeSessionId) return
     setActiveMessages([])
     setActiveSessionId(id)
   }, [activeSessionId])
 
-  // 删除会话
   const handleDeleteSession = useCallback(
     async (id) => {
       try {
@@ -117,8 +94,21 @@ export default function App() {
         if (!res.ok) throw new Error('删除失败')
         const updated = sessions.filter((s) => s.id !== id)
         setSessions(updated)
+
         if (id === activeSessionId) {
-          setActiveSessionId(updated.length > 0 ? updated[0].id : null)
+          if (updated.length > 0) {
+            setActiveSessionId(updated[0].id)
+          } else {
+            // 🌟 核心修复 2：如果删除了左侧最后一个会话，自动补位创建，绝不留空白
+            const createRes = await fetch(API_BASE, { method: 'POST' })
+            if (createRes.ok) {
+              const newSession = await createRes.json()
+              setSessions([newSession])
+              setActiveSessionId(newSession.id)
+            } else {
+              setActiveSessionId(null)
+            }
+          }
         }
       } catch (err) {
         console.error('删除会话失败:', err)
@@ -127,7 +117,6 @@ export default function App() {
     [sessions, activeSessionId]
   )
 
-  // 保存单条消息到后端数据库 + 第一条用户消息自动设为会话标题
   const saveMessage = useCallback(async (sessionId, role, content) => {
     try {
       const res = await fetch(`${API_BASE}/${sessionId}/messages`, {
@@ -137,7 +126,6 @@ export default function App() {
       })
       if (!res.ok) throw new Error('保存消息失败')
 
-      // 如果是用户消息，取前 30 字自动更新侧边栏标题
       if (role === 'user') {
         const title = content.slice(0, 30) + (content.length > 30 ? '…' : '')
         setSessions((prev) =>
@@ -156,13 +144,9 @@ export default function App() {
     }
   }, [])
 
-  // 消息变更回调
   const handleMessagesChange = useCallback(
     (messages) => {
       if (!activeSessionId) return
-      if (messages.length > msgCountRef.current) {
-        msgCountRef.current = messages.length
-      }
       setActiveMessages(messages)
     },
     [activeSessionId]

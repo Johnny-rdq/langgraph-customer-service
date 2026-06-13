@@ -1,6 +1,6 @@
-"""DP Pydantic 数据模型模块
-DP 定义 API 请求与响应的数据格式，提供自动校验和序列化。
-DP 包含 ChatRequest / ChatResponse / SaveMessageRequest / HealthResponse。
+"""Pydantic 数据模型模块
+定义 API 请求与响应的数据格式，提供自动校验和序列化。
+包含 ChatRequest / ChatResponse / SaveMessageRequest / HealthResponse。
 """
 from pydantic import BaseModel, Field  # Pydantic 数据校验库
 from typing import Optional  # 可选类型标注
@@ -10,7 +10,7 @@ from datetime import datetime  # 时间戳类型
 # ── 请求模型 ──
 
 class ChatRequest(BaseModel):
-    """DP 前端发送的对话请求体"""
+    """前端发送的对话请求体"""
     user_id: str = Field(..., description="用户唯一标识，用于区分不同会话")
     message: str = Field(
         ...,  # ... 表示必填
@@ -27,7 +27,7 @@ class ChatRequest(BaseModel):
 # ── 响应模型 ──
 
 class ChatResponse(BaseModel):
-    """DP 后端返回的对话响应体"""
+    """后端返回的对话响应体"""
     session_id: str = Field(..., description="当前会话唯一 ID")
     reply: str = Field(..., description="客服 Agent 生成的回复内容")
     intent: str = Field(default="general", description="识别到的用户意图")
@@ -42,7 +42,7 @@ class ChatResponse(BaseModel):
 
 
 class SaveMessageRequest(BaseModel):
-    """DP 保存消息的请求体 —— 前端调用消息保存接口时使用"""
+    """保存消息的请求体 —— 前端调用消息保存接口时使用"""
     role: str = Field(
         ...,  # 必填
         pattern="^(user|assistant)$",  # 正则校验，只允许 user 或 assistant
@@ -57,6 +57,6 @@ class SaveMessageRequest(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """DP 健康检查响应模型"""
+    """健康检查响应模型"""
     status: str = Field(default="ok", description="服务状态")
     model: str = Field(default="qwen-turbo", description="当前使用的模型")
