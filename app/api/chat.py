@@ -18,6 +18,9 @@ from app.core.llm import get_llm
 from app.tools.retriever import retrieve_knowledge
 from langchain_core.messages import HumanMessage, AIMessage
 from app.tools.logistics import handle_logistics_intent
+from sqlmodel import Session
+from app.core.db import engine
+from app.models.db_models import ChatSession, ChatMessage
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +84,29 @@ async def chat_stream(request: ChatRequest):
         start_time = time.time()
 
         try:
+            # 🌟🌟🌟 拦截器：检查是否已被人工接管 🌟🌟🌟
+            with Session(engine) as db:
+                chat_session = db.get(ChatSession, session_id)
+                if chat_session and chat_session.is_human_mode:
+                    # DP 会话已处于人工模式，用户消息已由 session.py 持久化，此处不重复保存。
+                    # DP 通过 WebSocket 实时推送用户消息给管理员面板（减少 2 秒轮询延迟）。
+                    yield f"data: {json.dumps({'type': 'done', 'session_id': session_id, 'intent': 'human', 'requires_human': True}, ensure_ascii=True)}\n\n"
+                    try:
+                        from app.api.ws import manager
+                        await manager.broadcast_to_admin({
+                            "type": "user_message",
+                            "session_id": session_id,
+                            "content": safe_message[:100],
+                            "role": "user"
+                        })
+                    except Exception:
+                        pass  # WebSocket 通知失败不影响主流程
+                    return
+            # 🌟🌟🌟 拦截器结束 🌟🌟🌟
+        except:
+            pass
+
+        try:
             # 1. 意图识别
             intent_prompt = INTENT_CLASSIFY_PROMPT.format(user_message=safe_message)
             intent_response = await llm.ainvoke(intent_prompt)
@@ -90,6 +116,45 @@ async def chat_stream(request: ChatRequest):
                 intent = "logistics"
 
             yield f"data: {json.dumps({'type': 'intent', 'content': intent}, ensure_ascii=True)}\n\n"
+
+            # ─────────────────────────────────────────────────
+            # DP 核心修复：用户转人工时立即写入数据库 + 通知管理员面板。
+            # 问题背景：之前识别到 human 意图后只返回 requires_human=True，从未写 is_human_mode，
+            # 导致管理员轮询 /ws/admin/sessions 永远看不到该会话。
+            # 修复要点：①写入 is_human_mode ②创建 ChatSession（如不存在）
+            # ③保存 AI 转接确认消息到 ChatMessage ④WebSocket 实时推送 ⑤结束 SSE 流
+            # 注意：用户消息已由 session.py 的 save_message 持久化，此处不重复保存。
+            # ─────────────────────────────────────────────────
+            if intent == "human":
+                try:
+                    with Session(engine) as db:
+                        chat_session = db.get(ChatSession, session_id)
+                        if not chat_session:
+                            chat_session = ChatSession(id=session_id, title=safe_message[:30])
+                            db.add(chat_session)
+                        chat_session.is_human_mode = True
+                        db.add(chat_session)
+                        # 保存 AI 转接确认消息（用户消息已由 session.py 持久化，避免重复）
+                        transfer_msg = ChatMessage(
+                            session_id=session_id, role="assistant",
+                            content="【系统提示】已为您成功转接，人工客服马上就来！"
+                        )
+                        db.add(transfer_msg)
+                        db.commit()
+                        logger.info(f"✅ 转人工成功！会话 {session_id} 已写入排队队列")
+                    try:
+                        from app.api.ws import manager
+                        await manager.broadcast_to_admin({
+                            "type": "new_human_session",
+                            "session_id": session_id,
+                            "user_message": safe_message[:50]
+                        })
+                    except Exception as ws_err:
+                        logger.warning(f"WebSocket 通知失败（不影响主流程）: {ws_err}")
+                except Exception as e:
+                    logger.error(f"转人工数据库写入失败: {e}", exc_info=True)
+                yield f"data: {json.dumps({'type': 'done', 'session_id': session_id, 'intent': 'human', 'requires_human': True}, ensure_ascii=True)}\n\n"
+                return
 
             # 2. 获取背景资料
             context = "暂无相关背景信息。"

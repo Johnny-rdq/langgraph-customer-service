@@ -25,7 +25,7 @@ COPY data/ ./data/        # 知识库等数据文件
 RUN mkdir -p /app/storage  # SQLite 和 ChromaDB 数据目录
 
 # ── 暴露端口 ──
-EXPOSE 8000  # FastAPI 服务端口
+EXPOSE 8888  # FastAPI 服务端口
 
 # ── 启动命令 ──
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]  # 启动 FastAPI
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8888"]  # 启动 FastAPI

@@ -32,6 +32,9 @@ class ChatSession(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)  # 会话创建时间
     updated_at: datetime = Field(default_factory=datetime.utcnow)  # 最后活跃时间
 
+    # 🌟 新增：人工接管状态标志
+    is_human_mode: bool = Field(default=False)
+
     # ── 关联关系：一个会话下有多条消息 ──
     messages: List[ChatMessage] = Relationship(
         back_populates=None,  # 单向关联，消息表不反向引用会话

@@ -21,15 +21,22 @@ export default function ChatInput({ onSend, disabled }) {
     adjustHeight()
   }, [input])
 
+  // 加载完成时自动聚焦
+  useEffect(() => {
+    if (!disabled && textareaRef.current) {
+      textareaRef.current.focus()
+    }
+  }, [disabled])
+
   // ── 发送消息 ──
   const handleSend = () => {
     const trimmed = input.trim()
     if (!trimmed || disabled) return  // 空消息或正在加载时不允许发送
     onSend(trimmed)                    // 调用父组件回调
     setInput('')                       // 清空输入框
-    // 重置高度
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = 'auto'  // 重置高度
+      textareaRef.current.focus()
     }
   }
 

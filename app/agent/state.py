@@ -66,3 +66,7 @@ def get_initial_state(
         "requires_human": False,  # 默认不转人工
         "current_step": "init",  # 标记当前处于初始化步骤
     }
+
+# 🌟 全局上下文变量（保险箱），用于跨文件无缝传递 ID
+from contextvars import ContextVar
+current_session_id: ContextVar[str] = ContextVar("current_session_id", default="")

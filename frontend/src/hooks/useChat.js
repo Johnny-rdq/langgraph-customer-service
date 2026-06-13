@@ -24,18 +24,86 @@ export default function useChat(sessionId, initialMessages = [], onMessagesChang
   const sessionIdRef = useRef(sessionId)                           // 后端会话 ID（ref 避免闭包问题）
   const userIdRef = useRef('user_' + generateMsgId())              // 用户唯一标识（页面级）
   const abortRef = useRef(null)                                    // AbortController，用于取消请求
+  const hasContentRef = useRef(false)                              // 当前会话是否有过消息（防止外部空数据覆盖导致闪屏）
 
-  // 切换会话时清空流式状态
+  // 切换会话时重置
   useEffect(() => {
-    setStreamingContent('')  // 清空流式缓冲区
-    setError(null)  // 清空错误
-  }, [sessionId])  // 仅 sessionId 变化时触发
+    setStreamingContent('')
+    setError(null)
+    hasContentRef.current = false
+  }, [sessionId])
 
-  // 同步外部 messages 到内部状态（切会话重置 + loadMessages 异步加载完成）
+  // 追踪内部消息是否有内容
   useEffect(() => {
-    setMessages(initialMessages)  // 外部消息列表变化 → 同步到 useChat 内部
-    sessionIdRef.current = sessionId  // 更新 session ref
-  }, [sessionId, initialMessages])  // ID 变或消息加载完成都触发
+    if (messages.length > 0) hasContentRef.current = true
+  }, [messages])
+
+  // 同步外部消息到内部状态。守卫：外部传入空数组但当前会话已有过消息时拒绝同步
+  useEffect(() => {
+    if (initialMessages.length === 0 && hasContentRef.current) return
+    setMessages(initialMessages)
+    sessionIdRef.current = sessionId
+  }, [sessionId, initialMessages])
+
+  // 🌟🌟🌟 新增：WebSocket 监听器（负责接收人工客服的突然回复） 🌟🌟🌟
+  useEffect(() => {
+    // 如果没有选中具体的会话，就不连接
+    if (!sessionId) return
+
+    // 建立 WebSocket 连接 (直连后端 8888 端口，与 main.py 硬编码端口一致)
+    const wsUrl = `ws://localhost:8888/api/v1/ws/${sessionId}`
+    const ws = new WebSocket(wsUrl)
+
+    ws.onopen = () => {
+      console.log(`✅ WebSocket 已连接 (Session: ${sessionId})`)
+    }
+
+    // 🌟 核心：监听到后端发来消息
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+
+        if (data.type === 'admin_reply') {
+          const adminMsg = {
+            id: generateMsgId(),
+            role: 'assistant',
+            content: data.content,
+          }
+
+          // ！！！关键修复：不光要更新内部，还要通知父组件 App.jsx ！！！
+          setMessages((prevMessages) => {
+            const newMessages = [...prevMessages, adminMsg];
+
+            // 用 setTimeout 避开 React 渲染冲突，将新消息同步给全局
+            setTimeout(() => {
+              if (onMessagesChange) {
+                onMessagesChange(newMessages);
+              }
+            }, 0);
+
+            return newMessages;
+          });
+        }
+      } catch (err) {
+        console.error('WebSocket 消息解析失败:', err)
+      }
+    }
+
+    ws.onclose = () => {
+      console.log(`❌ WebSocket 已断开 (Session: ${sessionId})`)
+    }
+
+    ws.onerror = (err) => {
+      console.error('WebSocket 发生错误:', err)
+    }
+
+    // 清理函数：当用户切换到别的会话，或者关闭网页时，自动断开旧的 WebSocket
+    return () => {
+      ws.close()
+    }
+  }, [sessionId]) // 只要 sessionId 变化，就重新建立对应的连接
+  // 🌟🌟🌟 WebSocket 监听器结束 🌟🌟🌟
+
 
   // ── 更新消息（同时通知父组件）──
   const updateMessages = useCallback(
@@ -95,6 +163,7 @@ export default function useChat(sessionId, initialMessages = [], onMessagesChang
         let fullContent = ''                        // 完整回复文本
         let finalSessionId = null                   // 流结束时的 session ID
         let finalIntent = 'general'                 // 流结束时的意图
+        let finalRequiresHuman = false              // 流结束时是否需要转人工
 
         while (true) {
           const { done, value } = await reader.read()  // 读取一块数据
@@ -126,6 +195,7 @@ export default function useChat(sessionId, initialMessages = [], onMessagesChang
                   // 流式结束，保存最终元数据
                   finalSessionId = event.session_id  // 记录 session ID
                   finalIntent = event.intent  // 记录意图
+                  finalRequiresHuman = event.requires_human || false
                   break
 
                 case 'error':
@@ -145,18 +215,21 @@ export default function useChat(sessionId, initialMessages = [], onMessagesChang
           sessionIdRef.current = finalSessionId  // 更新 session ref
         }
 
-        const aiMsg = {
-          id: generateMsgId(),  // 生成 AI 消息 ID
-          role: 'assistant',  // 角色为助手
-          content: fullContent || '（未收到有效回复）',  // AI 回复兜底文本
-        }
-        updateMessages([...updatedMessages, aiMsg])  // 追加 AI 消息到列表
-        setStreamingContent('')  // 清空流式缓冲区
+        // 转人工时不生成本地 AI 兜底消息，等轮询从 DB 加载
+        if (!finalRequiresHuman) {
+          const aiMsg = {
+            id: generateMsgId(),
+            role: 'assistant',
+            content: fullContent || '（未收到有效回复）',
+          }
+          updateMessages([...updatedMessages, aiMsg])  // 追加 AI 消息到列表
 
-        // 持久化 AI 回复到后端数据库
-        if (onSaveMessage && finalSessionId) {
-          onSaveMessage(finalSessionId, 'assistant', fullContent || '（未收到有效回复）')  // 异步保存
+          // 持久化 AI 回复到后端数据库
+          if (onSaveMessage && finalSessionId) {
+            onSaveMessage(finalSessionId, 'assistant', fullContent || '（未收到有效回复）')
+          }
         }
+        setStreamingContent('')  // 清空流式缓冲区
 
       } catch (err) {
         if (err.name === 'AbortError') {
