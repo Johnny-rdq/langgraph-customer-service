@@ -99,7 +99,6 @@ def build_graph() -> StateGraph:
     workflow.add_edge("logistics_node", END)  # 物流查询后结束
 
     # 2. 修改这里：使用 sqlite3 连接数据库
-    from app.core.db import STORAGE_DIR
     db_path = str(STORAGE_DIR / "chat_database.db")
 
     # 建立长连接，允许跨线程使用

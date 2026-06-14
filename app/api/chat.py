@@ -6,7 +6,6 @@ import uuid
 import json
 import asyncio as _asyncio  # 用于 to_thread 执行同步 graph.invoke
 import logging
-import time
 import re
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -37,7 +36,6 @@ def clean_text(text: str) -> str:
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     """普通对话接口"""
-    start_time = time.time()
     session_id = request.session_id or str(uuid.uuid4())
     safe_message = clean_text(request.message)
 
@@ -48,7 +46,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
     )
 
     try:
-        import asyncio as _asyncio
         config = {"configurable": {"thread_id": session_id}}
         # SqliteSaver 不支持异步，在线程池中执行同步 invoke
         result = await _asyncio.to_thread(_graph.invoke, initial_state, config)
@@ -81,7 +78,6 @@ async def chat_stream(request: ChatRequest):
 
     async def event_generator():
         llm = get_llm()
-        start_time = time.time()
 
         try:
             # 🌟🌟🌟 拦截器：检查是否已被人工接管 🌟🌟🌟

@@ -4,15 +4,13 @@ LangGraph 节点定义模块
 """
 import logging  # 日志模块，用于记录运行信息
 from langchain_core.messages import AIMessage, HumanMessage  # LangChain 消息类型
-from app.agent.state import AgentState  # 导入状态定义
+from app.agent.state import AgentState, current_session_id  # 导入状态定义和 ContextVar 保险箱
 from app.core.llm import get_llm  # 导入 LLM 实例获取函数
 from app.tools.retriever import retrieve_knowledge  # 导入知识库检索工具
 from app.tools.logistics import handle_logistics_intent  # 导入物流查询工具
-from sqlmodel import Session
-from app.core.db import engine  # 假设你的 db.py 里暴露了 engine
-from app.models.db_models import ChatSession
-import requests
-import threading
+from sqlmodel import Session, select  # 数据库会话和查询语句
+from app.core.db import engine  # 数据库引擎
+from app.models.db_models import ChatSession, ChatMessage  # ORM 数据表模型
 
 logger = logging.getLogger(__name__)  # 创建当前模块的日志记录器
 
@@ -61,13 +59,6 @@ RESPONSE_GENERATION_PROMPT = """你是一个专业、友好的客服助手。请
 
 
 def classify_intent_node(state: dict, config: dict = None) -> dict:
-    import logging
-    from app.core.db import engine
-    from sqlmodel import Session
-    from app.models.db_models import ChatSession
-    from langchain_core.messages import AIMessage
-    from app.agent.state import current_session_id  # 👈 导入保险箱
-
     logger = logging.getLogger(__name__)
 
     # 🎯 降维打击：不靠底层传参了，直接从保险箱里拿！
@@ -89,7 +80,6 @@ def classify_intent_node(state: dict, config: dict = None) -> dict:
             pass
 
     user_message = state["messages"][-1].content if state["messages"] else ""
-    from app.core.llm import get_llm
     prompt = INTENT_CLASSIFY_PROMPT.format(user_message=user_message)
 
     llm = get_llm()
@@ -165,12 +155,7 @@ def human_service_node(state: AgentState, config: dict = None) -> AgentState:
       3. 保存用户最后一条消息到 ChatMessage 表
       4. 通过 WebSocket 实时通知管理员面板（减少轮询延迟）
     """
-    import logging
-    from app.core.db import engine
-    from sqlmodel import Session as DBSession, select
-    from app.models.db_models import ChatSession, ChatMessage
-    from langchain_core.messages import AIMessage, HumanMessage
-    from app.agent.state import current_session_id  # ContextVar 保险箱
+    from sqlmodel import Session as DBSession  # 数据库会话别名，与 LangGraph 会话区分
 
     logger = logging.getLogger(__name__)
 

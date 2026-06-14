@@ -2,7 +2,6 @@
 核心配置模块
 负责读取 .env 环境变量与全局配置，统一管理所有配置项
 """
-import os  # 导入 os 模块，用于读取环境变量
 from pydantic_settings import BaseSettings  # pydantic-settings 提供从 .env 自动加载配置的能力
 from functools import lru_cache  # 缓存配置对象，避免重复读取
 

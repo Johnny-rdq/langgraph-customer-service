@@ -4,7 +4,6 @@ FastAPI 应用启动入口
 """
 import sys
 import threading
-import time
 import subprocess
 from pathlib import Path
 import logging
