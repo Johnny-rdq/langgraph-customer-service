@@ -7,14 +7,6 @@ from app.agent.state import AgentState
 logger = logging.getLogger(__name__)
 
 def route_after_intent(state: AgentState) -> str:
-    # 1. 绝对强制物理拦截转人工
-    messages = state.get("messages", [])
-    if messages:
-        last_msg = messages[-1]
-        content = last_msg.content if hasattr(last_msg, 'content') else last_msg.get('content', '')
-        if "转人工" in content or "人工" in content or "投诉" in content:
-            return "human_service"
-
     intent = state.get("intent", "general")
 
     # 🌟 如果是静音模式（人工接管中），直接结束图流程，不查知识库也不聊天
@@ -26,7 +18,10 @@ def route_after_intent(state: AgentState) -> str:
         return "human_service"
     elif intent == "logistics":
         return "logistics_node"
-    elif intent in ("complaint", "inquiry"):
+    elif intent == "complaint":
+        # 后端 投诉统一转人工处理，不走知识库检索
+        return "human_service"
+    elif intent == "inquiry":
         return "retrieve_knowledge"
     else:
         return "direct_response"
@@ -34,11 +29,9 @@ def route_after_intent(state: AgentState) -> str:
 
 def route_after_retrieval(state: AgentState) -> str:
     context = state.get("retrieved_context", "")
-    intent = state.get("intent", "")
 
     if not context or context.startswith("暂无"):
-        if intent == "complaint":
-            return "human_service"
+        # 后端 知识库无匹配时仍尝试生成回复（generate_response 会自行判断是否转人工）
         return "generate_response"
     return "generate_response"
 

@@ -114,14 +114,13 @@ async def chat_stream(request: ChatRequest):
             yield f"data: {json.dumps({'type': 'intent', 'content': intent}, ensure_ascii=True)}\n\n"
 
             # ─────────────────────────────────────────────────
-            # 核心修复：用户转人工时立即写入数据库 + 通知管理员面板。
-            # 问题背景：之前识别到 human 意图后只返回 requires_human=True，从未写 is_human_mode，
-            # 导致管理员轮询 /ws/admin/sessions 永远看不到该会话。
+            # 转人工 / 投诉处理：立即写入数据库 + 通知管理员面板。
+            # human: 用户明确要求转人工  complaint: 投诉或情绪负面用户
             # 修复要点：①写入 is_human_mode ②创建 ChatSession（如不存在）
             # ③保存 AI 转接确认消息到 ChatMessage ④WebSocket 实时推送 ⑤结束 SSE 流
             # 注意：用户消息已由 session.py 的 save_message 持久化，此处不重复保存。
             # ─────────────────────────────────────────────────
-            if intent == "human":
+            if intent in ("human", "complaint"):
                 try:
                     with Session(engine) as db:
                         chat_session = db.get(ChatSession, session_id)
@@ -149,7 +148,7 @@ async def chat_stream(request: ChatRequest):
                         logger.warning(f"WebSocket 通知失败（不影响主流程）: {ws_err}")
                 except Exception as e:
                     logger.error(f"转人工数据库写入失败: {e}", exc_info=True)
-                yield f"data: {json.dumps({'type': 'done', 'session_id': session_id, 'intent': 'human', 'requires_human': True}, ensure_ascii=True)}\n\n"
+                yield f"data: {json.dumps({'type': 'done', 'session_id': session_id, 'intent': intent, 'requires_human': True}, ensure_ascii=True)}\n\n"
                 return
 
             # 2. 获取背景资料

@@ -31,11 +31,12 @@ def build_graph() -> StateGraph:
 
     工作流结构:
     ```
-    classify_intent (意图识别)
-        ├── intent=human ──→ human_service ──→ END
-        ├── intent=complaint/inquiry ──→ retrieve_knowledge (检索知识库)
+    classify_intent (意图识别 + 情绪判断)
+        ├── intent=human/complaint ──→ human_service ──→ END
+        ├── intent=inquiry ──→ retrieve_knowledge (检索知识库)
         │       ├── 有匹配 ──→ generate_response ──→ END
-        │       └── 无匹配(投诉) ──→ human_service ──→ END
+        │       └── 无匹配 ──→ generate_response (自行判断转人工)
+        ├── intent=logistics ──→ logistics_node ──→ END
         └── intent=general ──→ direct_response ──→ END
     ```
 
@@ -49,7 +50,7 @@ def build_graph() -> StateGraph:
 
     # ── 添加节点 ──
     # 每个节点对应一个处理函数
-    workflow.add_node("classify_intent", classify_intent_node)  # 意图识别节点
+    workflow.add_node("classify_intent", classify_intent_node)  # 意图识别节点（含情绪判断）
     workflow.add_node("retrieve_knowledge", retrieve_knowledge_node)  # 知识库检索节点
     workflow.add_node("generate_response", generate_response_node)  # 回复生成节点
     workflow.add_node("human_service", human_service_node)  # 人工客服节点
@@ -66,7 +67,7 @@ def build_graph() -> StateGraph:
         "classify_intent",  # 出发节点
         route_after_intent,  # 路由函数
         {
-            "human_service": "human_service",  # 转人工
+            "human_service": "human_service",  # 转人工（含投诉）
             "retrieve_knowledge": "retrieve_knowledge",  # 检索知识库
             "direct_response": "direct_response",  # 直接回复
             "logistics_node": "logistics_node",  # 物流查询
