@@ -14,6 +14,14 @@ export default defineConfig({
       '/api': {
         target: API_TARGET,  // 后端地址（开发: localhost, Docker: backend 服务名）
         changeOrigin: true,  // 修改请求头中的 origin
+        configure: (proxy) => {  // 后端 代理响应拦截
+          proxy.on('proxyRes', (proxyRes) => {
+            const loc = proxyRes.headers['location']  // 获取重定向地址
+            if (loc) {
+              proxyRes.headers['location'] = loc.replace(/^https?:\/\/[^/]+/, '')  // 去掉内部主机名，避免浏览器 DNS 报错
+            }
+          })
+        },
       },
     },
   },

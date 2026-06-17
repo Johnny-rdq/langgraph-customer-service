@@ -106,53 +106,76 @@ langgraph-customer-service/
 
 ## 🚀 快速开始
 
-### 1. 环境准备
+### 方式一：Docker 部署（推荐 🐳）
 
-- **Python** >= 3.10
-- **Node.js** >= 18
+> 一键启动前后端，无需手动安装 Python/Node 环境。
 
-### 2. 克隆项目
+**1. 克隆项目**
 
 ```bash
 git clone https://github.com/Johnny-rdq/langgraph-customer-service.git
 cd langgraph-customer-service
 ```
 
-### 3. 安装依赖
+**2. 配置环境变量**
+
+```bash
+cp .env.example .env
+# 编辑 .env，必填 DASHSCOPE_API_KEY=sk-xxxxxxxx
+# APP_PORT 可自定义后端端口，默认 8001
+```
+
+**3. 启动**
+
+```bash
+docker-compose up -d --build
+```
+
+**4. 访问**
+
+| 地址 | 说明 |
+|------|------|
+| http://localhost:3000 | 用户聊天界面 |
+| http://localhost:3000/admin | 人工客服工作台 |
+| http://localhost:8001/docs | API 文档 (Swagger) |
+
+**5. 停止**
+
+```bash
+docker-compose down       # 停止容器
+docker-compose down -v    # 停止并删除数据卷（清空数据库）
+```
+
+### 方式二：本地开发
+
+**1. 环境准备**
+
+- **Python** >= 3.10
+- **Node.js** >= 18
+
+**2. 安装依赖**
 
 ```bash
 pip install -r requirements.txt
 cd frontend && npm install && cd ..
 ```
 
-### 4. 配置环境变量
+**3. 配置并启动**
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填入百炼 API Key: DASHSCOPE_API_KEY=sk-xxxxxxxx
+# 编辑 .env，填入 DASHSCOPE_API_KEY，APP_PORT 设为 8888
+python app/main.py   # 一键启动前后端
 ```
 
-### 5. 启动
+**4. 访问**：http://localhost:3000（用户端）/ http://localhost:3000/admin（管理端）/ http://localhost:8888/docs（API）
 
-```bash
-python app/main.py
-```
+### 端口说明
 
-### 6. 访问
-
-| 地址 | 说明 |
-|------|------|
-| http://localhost:3000 | 用户聊天界面 |
-| http://localhost:3000/admin | 人工客服工作台 |
-| http://localhost:8888/docs | API 文档 (Swagger) |
-
-### Docker 部署 🐳
-
-```bash
-cp .env.example .env  # 编辑填入 DASHSCOPE_API_KEY
-docker-compose up -d   # 一键启动前后端
-docker-compose down    # 停止
-```
+| 模式 | 后端端口 | 前端端口 |
+|------|----------|----------|
+| Docker 部署 | `8001`（由 `.env` 的 `APP_PORT` 控制） | `3000` |
+| 本地开发 | `8888`（main.py 默认） | `3000` |
 
 ## 📡 API 接口
 
@@ -201,10 +224,47 @@ docker-compose down    # 停止
 | `LLM_MODEL` | 模型选择 | `qwen-turbo` |
 | `LLM_TEMPERATURE` | 回复随机性 (0~1) | `0.7` |
 | `LLM_MAX_TOKENS` | 最大输出 Token | `2048` |
-| `APP_PORT` | 服务端口 | `8888` |
+| `APP_PORT` | 服务端口 | `8888`（本地）/ `8001`（Docker） |
+| `APP_HOST` | 服务绑定地址 | `0.0.0.0` |
 | `DEBUG` | 调试模式 | `true` |
+| `KNOWLEDGE_BASE_PATH` | 知识库文件路径 | `data/knowledge_base.txt` |
 
 > 模型可选：`qwen-turbo`（快速）、`qwen-plus`（推荐）、`qwen-max`（最佳效果）
+
+## 🐳 Docker 架构
+
+```
+浏览器(localhost) → :3000(Vite Dev Server) → :8001(FastAPI)
+                         │                        │
+                     cs-frontend ──cs-network── cs-backend
+                         │                        │
+                    Proxy /api/* →         LangGraph + ChromaDB
+                    重写 Location 头          + SQLite
+```
+
+- 前端 Vite 代理将 `/api/*` 请求转发到后端容器（通过内部网络 `cs-network`）
+- 代理自动重写 307 重定向的 Location 头，避免浏览器 DNS 无法解析 `backend` 容器名
+- WebSocket 通过前端代理转发到后端，无需直连后端端口
+- 持久化数据挂载在 `./storage/`（SQLite 数据库 + ChromaDB 向量库）
+
+### Docker 常见问题
+
+**Q: 页面卡死 / `ERR_NAME_NOT_RESOLVED` 错误**
+
+> 已被修复（vite 代理重写 Location 头），若仍出现请确保 `.env` 中 `APP_PORT` 与 docker-compose 端口映射一致。
+
+**Q: 前端修改没生效**
+
+```bash
+docker-compose up -d --build frontend  # 只重建前端
+```
+
+**Q: 清空所有数据重新开始**
+
+```bash
+docker-compose down -v
+rm -rf storage/
+```
 
 ## 🎯 核心功能
 

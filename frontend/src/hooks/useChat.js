@@ -89,7 +89,8 @@ export default function useChat(sessionId, initialMessages = [], onMessagesChang
 
   useEffect(() => {
     if (!sessionId) return
-    const wsUrl = `ws://localhost:8888/api/v1/ws/${sessionId}`
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const wsUrl = `${protocol}://${window.location.host}/api/v1/ws/${sessionId}`
     const ws = new WebSocket(wsUrl)
 
     ws.onopen = () => console.log(`✅ WebSocket 已连接 (Session: ${sessionId})`)

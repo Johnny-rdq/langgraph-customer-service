@@ -19,7 +19,7 @@ export default function AdminPanel() {
   // ── 拉取排队列表的公共函数（供轮询和 WebSocket 通知复用）──
   const fetchSessions = async () => {
     try {
-      const res = await fetch('http://localhost:8888/api/v1/ws/admin/sessions');
+      const res = await fetch('/api/v1/ws/admin/sessions');
       const data = await res.json();
       setSessions(data);
     } catch (error) {
@@ -30,7 +30,7 @@ export default function AdminPanel() {
   const fetchChatHistory = async (sessionId) => {
     if (!sessionId) return;
     try {
-      const res = await fetch(`http://localhost:8888/api/v1/sessions/${sessionId}/messages`);
+      const res = await fetch(`/api/v1/sessions/${sessionId}/messages`);
       const data = await res.json();
       setChatHistory(data);
     } catch (error) {
@@ -45,7 +45,8 @@ export default function AdminPanel() {
     let pingInterval = null;
 
     const connectWs = () => {
-      ws = new WebSocket('ws://localhost:8888/api/v1/ws/admin/listen');
+      const adminWsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+      ws = new WebSocket(`${adminWsProtocol}://${window.location.host}/api/v1/ws/admin/listen`);
 
       ws.onopen = () => {
         setWsConnected(true);
@@ -132,7 +133,7 @@ export default function AdminPanel() {
   const handleSend = async () => {
     if (!message.trim() || !activeSession) return;
     try {
-      const res = await fetch('http://localhost:8888/api/v1/ws/admin/send', {
+      const res = await fetch('/api/v1/ws/admin/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ session_id: activeSession, content: message })

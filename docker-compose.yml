@@ -2,8 +2,6 @@
 # LangGraph 智能客服系统 — Docker Compose 编排
 # 启动方式: docker-compose up -d
 # ================================================
-version: "3.8"  # Docker Compose 文件版本
-
 services:
   # ── 后端服务 (FastAPI + LangGraph) ──
   backend:
@@ -12,7 +10,7 @@ services:
       dockerfile: Dockerfile
     container_name: cs-backend  # 容器名称，便于管理
     ports:
-      - "${APP_PORT:-8888}:8888"  # 映射后端端口（从 .env 读取，默认 8888）
+      - "${APP_PORT:-8000}:8000"  # 映射后端端口（从 .env 读取，默认 8888）
     env_file:
       - .env                # 加载环境变量（API Key 等）
     environment:

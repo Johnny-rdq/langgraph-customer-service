@@ -1,29 +1,29 @@
-# ================================================
-# LangGraph 智能客服系统 — 项目依赖
-# ================================================
-# 安装方式: pip install -r requirements.txt
-
+# 后端 LangGraph 智能客服系统 核心依赖
 # ── Web 框架 ──
-fastapi>=0.110.0          # FastAPI Web 框架
-uvicorn[standard]>=0.27.0 # ASGI 服务器 (Uvicorn)
-
-# ── LangGraph & LangChain ──
-langgraph>=0.2.0           # LangGraph 状态图编排框架
-langchain>=0.3.0           # LangChain 基础框架
-langchain-openai>=0.2.0    # LangChain OpenAI 兼容接口（用于对接百炼）
-langchain-core>=0.3.0      # LangChain 核心消息类型
-
-# ── 配置管理 ──
-pydantic>=2.0.0            # Pydantic 数据校验
-pydantic-settings>=2.0.0   # Pydantic 环境变量加载
-
-# ── 知识库检索 ──
-scikit-learn>=1.3.0        # TF-IDF 向量化和相似度计算
-jieba>=0.42.1              # 中文分词库
-# 如需升级为向量检索，可添加:
-# chromadb>=0.4.0          # 轻量级向量数据库
-# faiss-cpu>=1.7.0         # Facebook 向量检索库
-
-# ── 可选依赖 ──
-# 若要直接使用 DashScope 原生 SDK (不通过 OpenAI 兼容模式)：
-# dashscope>=1.20.0
+fastapi>=0.136.0
+uvicorn>=0.47.0
+# ── AI 编排 (LangGraph + LangChain) ──
+langgraph>=1.2.0
+langgraph-checkpoint-sqlite>=3.1.0
+langchain>=1.3.0
+langchain-core>=1.4.0
+langchain-openai>=1.2.0
+langchain-community>=0.4.0
+langchain-chroma>=1.1.0
+# ── 向量数据库 ──
+chromadb>=1.5.0
+# ── LLM SDK ──
+dashscope>=1.25.0
+openai>=2.37.0
+# ── 数据库 ──
+sqlmodel>=0.0.38
+aiosqlite>=0.22.0
+# ── 数据校验与配置 ──
+pydantic>=2.13.0
+pydantic-settings>=2.14.0
+python-dotenv>=1.2.0
+# ── 实时通信 ──
+websockets>=16.0
+httpx>=0.28.0
+# ── 工具库 ──
+typing-extensions>=4.15.0
