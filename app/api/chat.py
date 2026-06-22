@@ -135,7 +135,7 @@ async def chat_stream(request: ChatRequest):
             # ③保存 AI 转接确认消息到 ChatMessage ④WebSocket 实时推送 ⑤结束 SSE 流
             # 注意：用户消息已由 session.py 的 save_message 持久化，此处不重复保存。
             # ─────────────────────────────────────────────────
-            if intent in ("human", "complaint") or sentiment == "negative":
+            if intent == "human" or sentiment == "negative":
                 try:
                     with Session(engine) as db:
                         chat_session = db.get(ChatSession, session_id)

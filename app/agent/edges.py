@@ -25,8 +25,9 @@ def route_after_intent(state: AgentState) -> str:
     elif intent == "logistics":
         return "logistics_node"
     elif intent == "complaint":
-        # 后端 投诉统一转人工处理，不走知识库检索
-        return "human_service"
+        # 后端 情绪负面已在上面拦截，走到这的投诉情绪为 neutral/positive
+        # 先走知识库检索让 AI 尝试解决，解决不了再转人工
+        return "retrieve_knowledge"
     elif intent == "inquiry":
         return "retrieve_knowledge"
     else:
