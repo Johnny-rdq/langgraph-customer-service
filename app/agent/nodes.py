@@ -123,10 +123,19 @@ def classify_intent_node(state: dict, config: dict = None) -> dict:
     if re.findall(r'\d{5,}', user_message):
         intent = "logistics"
 
+    # ── 负面情绪容忍计数：首次不转人工，累计 2 次才转 ──
+    negative_count = state.get("negative_count", 0)  # 从历史状态读取累计次数
+    if sentiment == "negative":
+        negative_count += 1  # 本次命中，计数器 +1
+    if negative_count < 2:
+        # 还没到阈值，给用户一次机会，情绪降级为 neutral 让 AI 先处理
+        sentiment = "neutral"
+
     return {
         **state,
         "intent": intent,
         "sentiment": sentiment,
+        "negative_count": negative_count,
         "current_step": "classify_intent",
     }
 

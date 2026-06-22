@@ -128,6 +128,20 @@ async def chat_stream(request: ChatRequest):
 
             yield f"data: {json.dumps({'type': 'intent', 'content': intent, 'sentiment': sentiment}, ensure_ascii=True)}\n\n"
 
+            # ── 负面情绪容忍计数：读取历史累计次数，首次不转，2 次才转 ──
+            negative_count = 0  # 默认从 0 开始
+            try:
+                config_snap = {"configurable": {"thread_id": session_id}}
+                snap = _graph.get_state(config_snap)
+                if snap and snap.values:
+                    negative_count = snap.values.get("negative_count", 0)
+            except Exception:
+                pass  # 读取状态失败不影响主流程
+            if sentiment == "negative":
+                negative_count += 1  # 本次命中
+            if negative_count < 2:
+                sentiment = "neutral"  # 还没到阈值，暂不转人工
+
             # ─────────────────────────────────────────────────
             # 转人工 / 投诉处理：立即写入数据库 + 通知管理员面板。
             # human: 用户明确要求转人工  complaint: 投诉或情绪负面用户
@@ -239,7 +253,8 @@ async def chat_stream(request: ChatRequest):
             try:
                 _graph.update_state(
                     config,
-                    {"messages": [HumanMessage(content=safe_message), AIMessage(content=full_reply)]}
+                    {"messages": [HumanMessage(content=safe_message), AIMessage(content=full_reply)],
+                     "negative_count": negative_count}  # 后端 持久化负面情绪计数器
                 )
             except Exception as e:
                 logger.warning(f"记忆写入失败，但不影响回复: {e}")

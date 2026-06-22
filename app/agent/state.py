@@ -31,6 +31,9 @@ class AgentState(TypedDict):
     # ── 用户情绪 ──
     sentiment: str  # 情绪判断结果，取值 "positive" / "neutral" / "negative"
 
+    # ── 负面情绪累计次数 ──
+    negative_count: int  # 同一会话内负面情绪出现次数，>= 2 时才真正转人工
+
     # ── 检索到的知识库内容 ──
     retrieved_context: str  # RAG 检索出的相关知识点拼接文本
 
@@ -66,6 +69,7 @@ def get_initial_state(
         "session_id": session_id,  # 会话 ID
         "intent": "",  # 意图待识别
         "sentiment": "neutral",  # 情绪待判断，默认中性
+        "negative_count": 0,  # 负面情绪计数器，首次容忍，累计 2 次才转人工
         "retrieved_context": "",  # 知识库内容待检索
         "requires_human": False,  # 默认不转人工
         "current_step": "init",  # 标记当前处于初始化步骤
