@@ -9,11 +9,15 @@ from functools import lru_cache  # 缓存配置对象，避免重复读取
 class Settings(BaseSettings):
     """全局配置类 —— 所有配置项从此处统一获取"""
 
-    # ── 阿里云百炼 (DashScope) 配置 ──
-    DASHSCOPE_API_KEY: str = ""  # 阿里云百炼 API Key，需在 .env 中填写
-    LLM_MODEL: str = "qwen-turbo"  # 默认使用千问增强版模型，也可选 qwen-max / qwen-turbo
+    # ── LLM Chat 模型配置（支持任意 OpenAI 兼容的 API，如 DeepSeek / 百炼 / OpenAI）──
+    LLM_API_KEY: str = ""  # Chat 模型的 API Key
+    LLM_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"  # OpenAI 兼容端点地址
+    LLM_MODEL: str = "deepseek-chat"  # 使用的模型名称，deepseek-chat 为 DeepSeek 最便宜文本模型
     LLM_TEMPERATURE: float = 0.7  # LLM 温度参数，控制回复的随机性
     LLM_MAX_TOKENS: int = 2048  # LLM 最大输出 Token 数
+
+    # ── Embedding 模型配置（用于向量检索，独立于 Chat 模型）──
+    DASHSCOPE_API_KEY: str = ""  # 阿里云百炼 API Key，Embedding 模型 text-embedding-v2 使用
 
     # ── 服务配置 ──
     APP_NAME: str = "LangGraph 智能客服系统"  # 应用名称，用于日志和文档展示

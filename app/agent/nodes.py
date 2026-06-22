@@ -16,29 +16,31 @@ logger = logging.getLogger(__name__)  # 创建当前模块的日志记录器
 
 
 # ── 意图识别提示模板 ──
-INTENT_CLASSIFY_PROMPT = """你是一个智能客服的意图识别模块。请分析用户的输入，判断其意图类别。
+INTENT_CLASSIFY_PROMPT = """你是一个智能客服的意图识别模块。请分析用户的输入，判断其意图类别和情绪状态。
 
 ## 意图类别
 - complaint: 用户投诉产品或服务问题
 - inquiry: 用户咨询产品信息、使用方法、政策等
-- logistics: 查询订单状态、物流、快递到哪了等。
+- logistics: 查询订单状态、物流、快递到哪了等
 - general: 一般性问候或闲聊
 - human: 用户明确要求转人工客服
 
-## 情绪判断规则（重要！）
-如果用户的情绪明显负面（愤怒、失望、沮丧、不耐烦），无论用户是否主动要求转人工，
-一律输出 human，让专业人工客服来处理。以下是情绪负面的典型信号：
-- 使用质问/反问语气（"你们怎么回事""到底能不能解决"）
-- 表达强烈不满（"太差了""气死我了""忍无可忍"）
-- 反复强调问题没解决（"说了多少次了""又来"）
-- 威胁性语言（"我要投诉""曝光你们""差评"）
+## 情绪状态
+- positive: 用户情绪积极、满意、开心
+- neutral: 用户情绪中性、平静，无明显情绪倾向
+- negative: 用户情绪明显负面，典型信号包括：
+  * 质问/反问语气（"你们怎么回事""到底能不能解决"）
+  * 表达强烈不满（"太差了""气死我了""忍无可忍"）
+  * 反复强调问题没解决（"说了多少次了""又来"）
+  * 威胁性语言（"我要投诉""曝光你们""差评"）
 
 ## 输出格式
-只输出意图类别名称，不要输出任何其他内容。
+严格按照以下 JSON 格式输出，不要输出任何其他内容：
+{{"intent": "意图类别", "sentiment": "情绪状态"}}
 
 用户消息: {user_message}
 
-意图:"""
+JSON:"""
 
 
 # ── 回复生成提示模板 ──
@@ -80,6 +82,7 @@ def classify_intent_node(state: dict, config: dict = None) -> dict:
                     return {
                         **state,
                         "intent": "silence",
+                        "sentiment": state.get("sentiment", "neutral"),
                         "messages": [AIMessage(content="[系统: 消息已送达客服，请稍候...]")],
                         "current_step": "classify_intent",
                     }
@@ -91,15 +94,39 @@ def classify_intent_node(state: dict, config: dict = None) -> dict:
 
     llm = get_llm()
     response = llm.invoke(prompt)
-    intent = response.content.strip().lower()
+    raw_output = response.content.strip().lower()
 
-    import re
+    # ── 解析 LLM 输出的 JSON（intent + sentiment）──
+    import json
+    import re  # 正则模块，用于提取 JSON 和匹配快递单号
+
+    # 尝试从 LLM 输出中提取 JSON（兼容可能带 markdown 代码块包裹的情况）
+    json_match = re.search(r'\{[^{}]*"intent"[^{}]*"sentiment"[^{}]*\}', raw_output)
+    intent = "general"  # 默认意图
+    sentiment = "neutral"  # 默认情绪中性
+    if json_match:
+        try:
+            parsed = json.loads(json_match.group(0))
+            intent = parsed.get("intent", "general").strip().lower()
+            sentiment = parsed.get("sentiment", "neutral").strip().lower()
+            # 校验收到的情绪值是否合法
+            if sentiment not in ("positive", "neutral", "negative"):
+                sentiment = "neutral"
+        except json.JSONDecodeError:
+            # JSON 解析失败时，回退到旧版纯文本解析（向后兼容）
+            logger.warning(f"[INTENT] JSON 解析失败，回退纯文本模式，LLM 输出: {raw_output[:100]}")
+            intent = raw_output.strip().lower()
+            if "negative" in raw_output or "complaint" in raw_output:
+                sentiment = "negative"
+
+    # ── 快递单号硬匹配：用户消息含 5 位以上数字即视为物流查询 ──
     if re.findall(r'\d{5,}', user_message):
         intent = "logistics"
 
     return {
         **state,
         "intent": intent,
+        "sentiment": sentiment,
         "current_step": "classify_intent",
     }
 

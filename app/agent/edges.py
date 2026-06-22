@@ -7,12 +7,18 @@ from app.agent.state import AgentState
 logger = logging.getLogger(__name__)
 
 def route_after_intent(state: AgentState) -> str:
+    # 后端 同时读取意图和情绪，做差异化路由
     intent = state.get("intent", "general")
+    sentiment = state.get("sentiment", "neutral")
 
     # 🌟 如果是静音模式（人工接管中），直接结束图流程，不查知识库也不聊天
     if intent == "silence":
         from langgraph.graph import END
         return END
+
+    # 🌟 情绪负面 → 无论什么意图，一律转人工（用户情绪爆炸，AI 处理不了）
+    if sentiment == "negative":
+        return "human_service"
 
     if intent == "human":
         return "human_service"

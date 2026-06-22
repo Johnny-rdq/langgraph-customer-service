@@ -28,6 +28,9 @@ class AgentState(TypedDict):
     # ── 识别到的用户意图 ──
     intent: str  # 意图分类结果，如 "complaint" / "inquiry" / "general"
 
+    # ── 用户情绪 ──
+    sentiment: str  # 情绪判断结果，取值 "positive" / "neutral" / "negative"
+
     # ── 检索到的知识库内容 ──
     retrieved_context: str  # RAG 检索出的相关知识点拼接文本
 
@@ -62,6 +65,7 @@ def get_initial_state(
         "user_id": user_id,  # 用户 ID
         "session_id": session_id,  # 会话 ID
         "intent": "",  # 意图待识别
+        "sentiment": "neutral",  # 情绪待判断，默认中性
         "retrieved_context": "",  # 知识库内容待检索
         "requires_human": False,  # 默认不转人工
         "current_step": "init",  # 标记当前处于初始化步骤

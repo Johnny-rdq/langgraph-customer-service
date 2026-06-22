@@ -103,15 +103,30 @@ async def chat_stream(request: ChatRequest):
             pass
 
         try:
-            # 1. 意图识别
+            # 1. 意图识别 + 情绪判断（LLM 输出 JSON，同时包含 intent 和 sentiment）
             intent_prompt = INTENT_CLASSIFY_PROMPT.format(user_message=safe_message)
             intent_response = await llm.ainvoke(intent_prompt)
-            intent = clean_text(intent_response.content).strip().lower() if intent_response.content else "general"
+            raw_output = clean_text(intent_response.content).strip().lower() if intent_response.content else '{"intent": "general", "sentiment": "neutral"}'
+
+            # ── 解析 JSON 输出，提取 intent + sentiment ──
+            intent = "general"  # 默认意图
+            sentiment = "neutral"  # 默认情绪中性
+            json_match = re.search(r'\{[^{}]*"intent"[^{}]*"sentiment"[^{}]*\}', raw_output)
+            if json_match:
+                try:
+                    parsed = json.loads(json_match.group(0))
+                    intent = parsed.get("intent", "general").strip().lower()
+                    sentiment = parsed.get("sentiment", "neutral").strip().lower()
+                    if sentiment not in ("positive", "neutral", "negative"):
+                        sentiment = "neutral"
+                except json.JSONDecodeError:
+                    logger.warning(f"[STREAM] JSON 解析失败，回退纯文本模式，LLM 输出: {raw_output[:100]}")
+                    intent = raw_output.strip().lower()
 
             if re.findall(r'\d{5,}', safe_message):
                 intent = "logistics"
 
-            yield f"data: {json.dumps({'type': 'intent', 'content': intent}, ensure_ascii=True)}\n\n"
+            yield f"data: {json.dumps({'type': 'intent', 'content': intent, 'sentiment': sentiment}, ensure_ascii=True)}\n\n"
 
             # ─────────────────────────────────────────────────
             # 转人工 / 投诉处理：立即写入数据库 + 通知管理员面板。
@@ -120,7 +135,7 @@ async def chat_stream(request: ChatRequest):
             # ③保存 AI 转接确认消息到 ChatMessage ④WebSocket 实时推送 ⑤结束 SSE 流
             # 注意：用户消息已由 session.py 的 save_message 持久化，此处不重复保存。
             # ─────────────────────────────────────────────────
-            if intent in ("human", "complaint"):
+            if intent in ("human", "complaint") or sentiment == "negative":
                 try:
                     with Session(engine) as db:
                         chat_session = db.get(ChatSession, session_id)
