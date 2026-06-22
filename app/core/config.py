@@ -2,8 +2,12 @@
 核心配置模块
 负责读取 .env 环境变量与全局配置，统一管理所有配置项
 """
+from pathlib import Path  # 路径计算，用于定位项目根目录
 from pydantic_settings import BaseSettings  # pydantic-settings 提供从 .env 自动加载配置的能力
 from functools import lru_cache  # 缓存配置对象，避免重复读取
+
+# 后端 计算项目根目录（app/core/config.py → 上溯两级 → 项目根）
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
@@ -35,7 +39,7 @@ class Settings(BaseSettings):
     HUMAN_SERVICE_THRESHOLD: float = 0.5  # 转人工的置信度阈值，低于此值则转人工
 
     class Config:
-        env_file = ".env"  # 自动从 .env 文件加载环境变量
+        env_file = str(_PROJECT_ROOT / ".env")  # 后端 使用绝对路径，确保 PyCharm / 终端 / Docker 都能找到 .env
         env_file_encoding = "utf-8"  # .env 文件编码格式
 
 
