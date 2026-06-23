@@ -1,6 +1,6 @@
 # LangGraph 智能客服系统 🤖
 
-基于 **LangGraph + 阿里云百炼 (DashScope) + ChromaDB** 构建的智能客服系统，支持意图识别、向量语义检索、物流查询、SSE 流式对话、转人工 + 管理员实时接管等完整客服工作流。
+基于 **LangGraph + DeepSeek + ChromaDB + 阿里云百炼 Embedding** 构建的智能客服系统，支持意图识别、向量语义检索、物流查询、SSE 流式对话、转人工 + 管理员实时接管等完整客服工作流。
 
 ## 🏗️ 项目架构
 
@@ -11,7 +11,7 @@ langgraph-customer-service/
 │   ├── core/                    # 核心基础设施
 │   │   ├── config.py            # 环境变量与全局配置 (pydantic-settings)
 │   │   ├── db.py                # SQLite 数据库连接
-│   │   └── llm.py               # 阿里云百炼 LLM 实例化
+│   │   └── llm.py               # LLM 实例化（DeepSeek，OpenAI 兼容协议）
 │   ├── api/                     # FastAPI 路由层
 │   │   ├── chat.py              # SSE 流式对话 + 转人工/投诉拦截 + WebSocket 通知
 │   │   ├── session.py           # 会话 CRUD + 消息持久化
@@ -94,8 +94,9 @@ langgraph-customer-service/
 |------|----------|------|
 | **Web 框架** | FastAPI | 异步 Web + WebSocket |
 | **AI 编排** | LangGraph | 状态图工作流 + SqliteSaver 记忆 |
-| **大模型** | 阿里云百炼 DashScope | qwen-turbo / qwen-plus / qwen-max |
-| **向量检索** | ChromaDB + text-embedding-v2 | 语义级知识库检索 |
+| **Chat 模型** | DeepSeek（OpenAI 兼容协议） | deepseek-chat，可切换任意兼容 API |
+| **Embedding** | 阿里云百炼 DashScope | text-embedding-v2，向量语义检索 |
+| **向量数据库** | ChromaDB | 本地持久化，MD5 自动更新索引 |
 | **数据库** | SQLModel + SQLite | 会话与消息存储 |
 | **数据校验** | Pydantic v2 | 请求/响应自动校验 |
 | **实时通信** | WebSocket | 管理员面板实时推送 |
@@ -220,16 +221,18 @@ python app/main.py   # 一键启动前后端
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `DASHSCOPE_API_KEY` | 阿里云百炼 API Key（**必填**） | — |
-| `LLM_MODEL` | 模型选择 | `qwen-turbo` |
+| `LLM_API_KEY` | Chat 模型 API Key（**必填**） | — |
+| `LLM_BASE_URL` | Chat 模型 API 地址 | `https://api.deepseek.com/v1` |
+| `LLM_MODEL` | Chat 模型选择 | `deepseek-chat` |
 | `LLM_TEMPERATURE` | 回复随机性 (0~1) | `0.7` |
 | `LLM_MAX_TOKENS` | 最大输出 Token | `2048` |
-| `APP_PORT` | 服务端口 | `8888`（本地）/ `8001`（Docker） |
+| `DASHSCOPE_API_KEY` | 阿里云百炼 API Key（**必填**，向量检索用） | — |
+| `APP_PORT` | 服务端口 | `8000` |
 | `APP_HOST` | 服务绑定地址 | `0.0.0.0` |
 | `DEBUG` | 调试模式 | `true` |
 | `KNOWLEDGE_BASE_PATH` | 知识库文件路径 | `data/knowledge_base.txt` |
 
-> 模型可选：`qwen-turbo`（快速）、`qwen-plus`（推荐）、`qwen-max`（最佳效果）
+> Chat / Embedding 模型分离：Chat 走 DeepSeek（可通过 `LLM_BASE_URL` 切换到任意 OpenAI 兼容 API），Embedding 走阿里云百炼 text-embedding-v2。
 
 ## 🐳 Docker 架构
 
@@ -268,7 +271,7 @@ rm -rf storage/
 
 ## 🎯 核心功能
 
-- **5 种意图识别 + 情绪判断**：complaint / inquiry / logistics / general / human，用户情绪负面时自动转人工
+- **5 种意图识别 + 情绪判断**：complaint / inquiry / logistics / general / human，负面情绪累计 2 次自动转人工（首次容忍）
 - **向量语义检索**：ChromaDB + text-embedding-v2，首次启动自动灌库
 - **多轮对话记忆**：LangGraph SqliteSaver，自动注入最近 10 轮上下文
 - **SSE 流式响应**：逐 Token 返回，打字机效果
