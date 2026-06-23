@@ -1,6 +1,6 @@
 # LangGraph 智能客服系统 🤖
 
-基于 **LangGraph + DeepSeek + ChromaDB + 阿里云百炼 Embedding** 构建的智能客服系统，支持意图识别、向量语义检索、物流查询、SSE 流式对话、转人工 + 管理员实时接管等完整客服工作流。
+基于 **LangGraph + DeepSeek + LlamaIndex + 阿里云百炼 Embedding** 构建的智能客服系统，支持意图识别、HyDE 增强语义检索、物流查询、SSE 流式对话、转人工 + 管理员实时接管等完整客服工作流。
 
 ## 🏗️ 项目架构
 
@@ -22,7 +22,7 @@ langgraph-customer-service/
 │   │   ├── edges.py             # 条件路由
 │   │   └── graph.py             # 图组装 + SqliteSaver 记忆
 │   ├── tools/                   # 外部工具
-│   │   ├── retriever.py         # ChromaDB 向量语义检索
+│   │   ├── retriever.py         # LlamaIndex 语义检索（HyDE 增强）
 │   │   └── logistics.py         # 物流查询（正则 + LLM 双策略）
 │   └── models/                  # 数据模型
 │       ├── schemas.py           # Pydantic 请求/响应模型
@@ -37,7 +37,7 @@ langgraph-customer-service/
 ├── data/knowledge_base.txt      # 客服知识库
 ├── storage/                     # 运行时数据（不提交 Git）
 │   ├── chat_database.db         # SQLite 会话数据库
-│   └── chroma_db/               # ChromaDB 向量存储
+│   └── llama_index/             # LlamaIndex 向量索引持久化
 ├── Dockerfile                   # 后端 Docker
 ├── docker-compose.yml           # 一键编排
 ├── requirements.txt
@@ -62,7 +62,8 @@ langgraph-customer-service/
     └────┘            ▼          ▼         ▼
       │      ┌──────────────┐ ┌───────┐ ┌─────────┐
       │      │ 知识库检索   │ │物流查询│ │直接回复 │
-      │      │(ChromaDB)    │ │(正则+ │ │(direct) │
+      │      │(LlamaIndex   │ │(正则+ │ │(direct) │
+      │      │ + HyDE)      │ │ LLM)  │          │
       │      └──────┬───────┘ │ LLM)  │ └────┬────┘
       │             │         └───┬───┘      │
       │        ┌────┼────┐        │          │
@@ -95,8 +96,8 @@ langgraph-customer-service/
 | **Web 框架** | FastAPI | 异步 Web + WebSocket |
 | **AI 编排** | LangGraph | 状态图工作流 + SqliteSaver 记忆 |
 | **Chat 模型** | DeepSeek（OpenAI 兼容协议） | deepseek-chat，可切换任意兼容 API |
-| **Embedding** | 阿里云百炼 DashScope | text-embedding-v2，向量语义检索 |
-| **向量数据库** | ChromaDB | 本地持久化，MD5 自动更新索引 |
+| **RAG 检索引擎** | LlamaIndex | HyDE 查询增强 + SentenceSplitter 语义分句 |
+| **Embedding** | 阿里云百炼 DashScope | text-embedding-v2，文本向量化 |
 | **数据库** | SQLModel + SQLite | 会话与消息存储 |
 | **数据校验** | Pydantic v2 | 请求/响应自动校验 |
 | **实时通信** | WebSocket | 管理员面板实时推送 |
@@ -241,14 +242,14 @@ python app/main.py   # 一键启动前后端
                          │                        │
                      cs-frontend ──cs-network── cs-backend
                          │                        │
-                    Proxy /api/* →         LangGraph + ChromaDB
+                    Proxy /api/* →         LangGraph + LlamaIndex
                     重写 Location 头          + SQLite
 ```
 
 - 前端 Vite 代理将 `/api/*` 请求转发到后端容器（通过内部网络 `cs-network`）
 - 代理自动重写 307 重定向的 Location 头，避免浏览器 DNS 无法解析 `backend` 容器名
 - WebSocket 通过前端代理转发到后端，无需直连后端端口
-- 持久化数据挂载在 `./storage/`（SQLite 数据库 + ChromaDB 向量库）
+- 持久化数据挂载在 `./storage/`（SQLite 数据库 + LlamaIndex 向量索引）
 
 ### Docker 常见问题
 
@@ -272,7 +273,7 @@ rm -rf storage/
 ## 🎯 核心功能
 
 - **5 种意图识别 + 情绪判断**：complaint / inquiry / logistics / general / human，负面情绪累计 2 次自动转人工（首次容忍）
-- **向量语义检索**：ChromaDB + text-embedding-v2，首次启动自动灌库
+- **HyDE 增强语义检索**：LlamaIndex + text-embedding-v2，LLM 生成假设答案辅助检索，首次启动自动建索引
 - **多轮对话记忆**：LangGraph SqliteSaver，自动注入最近 10 轮上下文
 - **SSE 流式响应**：逐 Token 返回，打字机效果
 - **转人工 + 实时接管**：用户转人工 → WebSocket 推送通知 → 管理员面板实时接管
